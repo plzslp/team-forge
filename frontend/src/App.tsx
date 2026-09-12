@@ -1,8 +1,11 @@
 import RiotLookup from "./RiotLookup";
+import { useTheme } from "./useTheme";
 import MatchRecord from "./MatchRecord";
 import { useState, useRef, useEffect } from "react";
 import {
   Swords,
+  Moon,
+  Sun,
   Pencil,
   History,
   ArrowUpRight,
@@ -26,6 +29,7 @@ import {
 } from "./domain";
 
 export default function App() {
+  const { theme, toggleTheme } = useTheme();
   const [page, setPage] = useState("편성");
   const [game, setGame] = useState<Game>("LOL");
   const [players, setPlayers] = useState<Player[]>(seed);
@@ -176,6 +180,10 @@ export default function App() {
           <span className="header-divider" />
           <span className="header-description">내전 팀 편성</span>
           <span className="header-user">개인용</span>
+          <button className="theme-toggle" onClick={toggleTheme} aria-label={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'} title={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}>
+            {theme === 'dark' ? <Sun size={17}/> : <Moon size={17}/>}
+            <span>{theme === 'dark' ? '라이트 모드' : '다크 모드'}</span>
+          </button>
         </div>
       </header>
       <nav className="navigation" aria-label="주 메뉴">
