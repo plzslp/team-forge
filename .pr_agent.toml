@@ -1,0 +1,19 @@
+# Qodo GitHub App (v2)
+# 기본 브랜치에 병합한 뒤 새 PR에서 적용 여부를 확인합니다.
+# https://docs.qodo.ai/install-and-configure/configuration-overview/configuration-and-command-reference
+
+[config]
+response_language = "ko-KR"
+
+[github_app]
+# PR 게시 시 변경사항 요약과 코드 리뷰를 자동으로 실행합니다.
+pr_commands = ["/agentic_describe", "/agentic_review"]
+
+[review_agent]
+# v2 리뷰 에이전트에도 한국어 작성 지침을 명시합니다.
+issues_user_guidelines = "리뷰 제목, 문제 설명, 영향과 수정 제안은 한국어로 작성하세요. 코드 식별자, 파일 경로, API 이름은 원문을 유지하세요."
+compliance_user_guidelines = "규칙 준수 여부에 대한 리뷰 제목, 설명과 수정 제안은 한국어로 작성하세요. 코드 식별자, 파일 경로, API 이름은 원문을 유지하세요."
+
+[qodo_describe_agent]
+# 작성자가 입력한 PR 본문은 보존하고 변경사항 요약을 별도 댓글로 게시합니다.
+publish_mode = "comment"
