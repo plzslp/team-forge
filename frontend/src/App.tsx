@@ -42,6 +42,7 @@ export default function App() {
   const [modal, setModal] = useState(false);
   const [notice, setNotice] = useState("");
   const [name, setName] = useState("");
+  const [formError, setFormError] = useState("");
   const [rating, setRating] = useState("1600");
   const [preferredRoles, setPreferredRoles] = useState<string[]>(["탑"]);
   const [scoreSource, setScoreSource] = useState<Player['source']>('manual');
@@ -58,6 +59,7 @@ export default function App() {
     }
   }, [scrollVersion]);
   function openEditor(player?: Player) {
+    setFormError("");
     setEditingId(player?.id ?? null);
     setScoreSource(player?.source ?? (player ? 'sample' : 'manual'));
     setRiotId(player?.riotId ?? '');
@@ -151,7 +153,23 @@ export default function App() {
   function add(e: React.FormEvent) {
     e.preventDefault();
     const score = Number(rating);
-    if (!name.trim() || !rating.trim() || !Number.isInteger(score) || score < 0 || score > 10000 || !preferredRoles.length) return;
+    if (!name.trim()) {
+      setFormError("닉네임을 입력해주세요. 공백만 입력할 수 없습니다.");
+      return;
+    }
+    if (name.length > 20) {
+      setFormError("닉네임은 20자 이하로 입력해주세요.");
+      return;
+    }
+    if (!rating.trim() || !Number.isInteger(score) || score < 0 || score > 10000) {
+      setFormError("실력 점수는 0부터 10000 사이의 정수로 입력해주세요.");
+      return;
+    }
+    if (!preferredRoles.length) {
+      setFormError("포지션을 하나 이상 선택해주세요.");
+      return;
+    }
+    setFormError("");
     const original = players.find(p => p.id === editingId);
     const updated: Player = {
       id: editingId ?? crypto.randomUUID(),
@@ -524,8 +542,18 @@ export default function App() {
               {game === "LOL" ? "리그 오브 레전드" : "오버워치"} · 데모 수동
               등록
             </p>
-            {game === "LOL" && <RiotLookup initialId={riotId} onApply={(account,id)=>{setRiotId(id);setRating(String(account.score));setDraftTier(account.tier);setScoreSource('demo-api');setCheckedAt(new Date().toISOString());}}/>}
-            <form onSubmit={add}>
+            {game === "LOL" && <RiotLookup initialId={riotId} onApply={(account, id) => {
+              if (editingId === null) {
+                setName(current => current.trim() ? current : account.name);
+              }
+              setRiotId(id);
+              setRating(String(account.score));
+              setDraftTier(account.tier);
+              setScoreSource('demo-api');
+              setCheckedAt(new Date().toISOString());
+              setFormError("");
+            }}/>}
+            <form onSubmit={add} noValidate onChange={() => setFormError("")}>
               <label>
                 닉네임
                 <input
@@ -555,6 +583,7 @@ export default function App() {
                 {roles[game].map(r => <label key={r}><input type="checkbox" checked={preferredRoles.includes(r)} onChange={() => setPreferredRoles(current => current.includes(r) ? current.filter(x => x !== r) : [...current, r])}/>{r}</label>)}
                 {preferredRoles.length === 0 && <p role="alert">포지션을 하나 이상 선택해주세요.</p>}
               </fieldset>
+              {formError && <p role="alert">{formError}</p>}
               <button className="primary" type="submit" disabled={preferredRoles.length === 0}>
                 <Check size={18} />
                 {editingId ? "수정 저장" : "참여자 등록"}
