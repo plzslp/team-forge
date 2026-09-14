@@ -171,10 +171,11 @@ export default function App() {
     }
     setFormError("");
     const original = players.find(p => p.id === editingId);
+    const accountTag = riotId.match(/^[^#]+(#[^#]+)$/)?.[1];
     const updated: Player = {
       id: editingId ?? crypto.randomUUID(),
       name: name.trim(),
-      tag: riotId || original?.tag || "수동 등록",
+      tag: accountTag || original?.tag || "수동 등록",
       tier: scoreSource === "manual" ? "수동 점수" : draftTier,
       source: scoreSource,
       riotId: riotId || undefined,
