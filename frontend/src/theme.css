@@ -1,0 +1,41 @@
+/* 테마 색상만 재정의한다. 레이아웃과 팀 구분은 공통 스타일을 사용한다. */
+:root { color-scheme: light; }
+.theme-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 10px; min-height: 36px; background: transparent; border: 1px solid #657588; border-radius: 3px; color: #e1e9f4; white-space: nowrap; font-size: 12px; }
+.theme-toggle:hover { background: #ffffff16; }
+:root[data-theme='dark'] { color-scheme: dark; color: #e1e6ee; background: #171b22; --blue: #88adff; --line: #3a4351; --muted: #a6b2c3; }
+[data-theme='dark'] .site-header { background: #171d27; }
+[data-theme='dark'] .navigation { background: #2e4f8d; }
+[data-theme='dark'] :is(.roster,.selection,.results,.history-card,.history-empty,.modal) { background: #222832; }
+[data-theme='dark'] :is(.game-tab.selected,.text-button,.filter,.player,.checkbox,.reset,.secondary,.team button,.modal-close) { background: #222832; }
+[data-theme='dark'] :is(.list-head,.riot-lookup) { background: #1c222b; }
+[data-theme='dark'] :is(.filter:hover,.player:hover) { background: #2b3545; }
+[data-theme='dark'] :is(.player.picked,.filter.on,.swap-notice,.team button.swapping) { background: #293c5e; }
+[data-theme='dark'] :is(.notice,.lookup-result) { border-color: #415a7b; }
+[data-theme='dark'] .notice { color: #bad0ff; background: #253852; }
+[data-theme='dark'] :is(.demo-note,.game-tab,.game-mode,.section-caption small,.filter,.list-label,.list-head,.player-info small,.player-role,.roster-footer,.reset,.count>span,.count strong span,.slot,.slot-number,.slot small,.slot button,.balance-note,.result-heading p,.secondary,.team button span,.team button svg,.empty,.history-card p,.history-card small,.eyebrow,footer,footer strong,.modal>p,.modal-close,.modal label,.role-options legend,.role-options legend small,.position-hint,.riot-lookup p,.score-source) { color: #aeb9c9; }
+[data-theme='dark'] :is(.demo-note strong,.tier small,.slot strong,.balance-note strong,.result-heading p strong,.team button,.history-empty h2,.searchbox input) { color: #e1e6ee; }
+[data-theme='dark'] .tier { color: #b1c4d9; }
+[data-theme='dark'] .tier.emerald { color: #71d4b2; }
+[data-theme='dark'] :is(.game-tab.selected,.filter.on,.text-button,.edit-action,.source-label,.history-card summary) { color: var(--blue); }
+[data-theme='dark'] :is(.searchbox,.game-options,.player,.checkbox,.slot,.secondary,footer,.riot-lookup,.history-card details) { border-color: var(--line); }
+[data-theme='dark'] .player { border-left-color: transparent; }
+[data-theme='dark'] .player.picked { border-left-color: var(--blue); }
+[data-theme='dark'] .picked .checkbox { background: #4778d4; border-color: #88adff; color: white; }
+[data-theme='dark'] .searchbox:focus-within { border-color: var(--blue); }
+[data-theme='dark'] .game-tab.selected { border-bottom-color: var(--blue); }
+[data-theme='dark'] .progress { background: #3b4452; }
+[data-theme='dark'] .primary { background: #3968bf; color: #fff; }
+[data-theme='dark'] .primary:hover { background: #4779d3; }
+[data-theme='dark'] .primary:disabled { background: #384352; color: #a4afbe; }
+[data-theme='dark'] .team { background: #202f47; border-color: #3e5d8c; border-top-color: #7aabff; }
+[data-theme='dark'] .team-1 { background: #3a282e; border-color: #79505a; border-top-color: #ef919b; }
+[data-theme='dark'] .team h3 { color: #a3c4ff; }
+[data-theme='dark'] .team-1 h3 { color: #ffb0b7; }
+[data-theme='dark'] .team button.swapping { border-color: #88adff; }
+[data-theme='dark'] .position-warning { color: #edcd99; background: #423626; }
+[data-theme='dark'] .role-options p { color: #ffadad; }
+[data-theme='dark'] :is(.modal input,.modal select,.history-card input,.history-card textarea) { color: #e1e6ee; background: #1b212b; border-color: #515e70; }
+[data-theme='dark'] input::placeholder, [data-theme='dark'] textarea::placeholder { color: #9caabd; opacity: 1; }
+[data-theme='dark'] .modal-backdrop { background: #080c14ba; }
+[data-theme='dark'] .game-icon-lol { color: #d9b765; }
+@media(max-width:500px) { .theme-toggle span { display: none; } .theme-toggle { min-width: 36px; } .header-inner { gap: 12px; } }
