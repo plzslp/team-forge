@@ -5,21 +5,79 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.example.teamforge.match.dto.TeamPreview;
+import com.example.teamforge.match.dto.ParticipantVersions;
 import com.example.teamforge.participant.entity.Game;
 import com.example.teamforge.participant.entity.Position;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 class MatchEntityTests {
     private List<MatchParticipant> participants() {
         return IntStream.range(0, 10).mapToObj(i -> new MatchParticipant(
                 UUID.randomUUID(), "참가자" + i, 1000, Position.LOL_TOP,
                 i < 5 ? MatchParticipant.Team.A : MatchParticipant.Team.B)).toList();
+    }
+
+    @ParameterizedTest
+    @EnumSource(Game.class)
+    void matchAndPreviewRejectPositionsFromAnotherGame(Game game) {
+        // given: 5:5 구성 중 한 명에게 다른 게임의 포지션을 배정한다.
+        Position valid = game == Game.LOL ? Position.LOL_TOP : Position.OVERWATCH_TANK;
+        Position invalid = game == Game.LOL ? Position.OVERWATCH_SUPPORT : Position.LOL_SUPPORT;
+        var players = IntStream.range(0, 10).mapToObj(i -> new MatchParticipant(
+                UUID.randomUUID(), "참가자" + i, 1000, i == 9 ? invalid : valid,
+                i < 5 ? MatchParticipant.Team.A : MatchParticipant.Team.B)).toList();
+        var versions = versionsFor(players);
+
+        // when / then: 확정 기록과 미리보기 모두 게임 불일치를 거절한다.
+        assertThrows(IllegalArgumentException.class, () ->
+                new Match(UUID.randomUUID(), game, Instant.EPOCH, players, null));
+        assertThrows(IllegalArgumentException.class, () -> new TeamPreview(game, players, versions));
+    }
+
+    private Map<UUID, ParticipantVersions> versionsFor(List<MatchParticipant> players) {
+        var versions = new HashMap<UUID, ParticipantVersions>();
+        players.forEach(p -> versions.put(p.getParticipantId(), new ParticipantVersions(1, 2)));
+        return versions;
+    }
+
+    @Test
+    void previewPreservesIndependentVersionsAndCopiesVersionMap() {
+        // given: 참여자 버전은 같고 프로필 버전만 다른 두 미리보기 입력을 준비한다.
+        var players = participants();
+        UUID id = players.get(0).getParticipantId();
+        var original = versionsFor(players);
+        var changed = new HashMap<>(original);
+        changed.put(id, new ParticipantVersions(1, 3));
+
+        // when: 두 미리보기를 생성한 뒤 원본 맵을 비운다.
+        var before = new TeamPreview(Game.LOL, players, original);
+        var after = new TeamPreview(Game.LOL, players, changed);
+        original.clear();
+
+        // then: 두 버전을 독립적으로 보존하고 외부 수정으로부터 보호한다.
+        assertEquals(new ParticipantVersions(1, 2), before.participantVersions().get(id));
+        assertEquals(new ParticipantVersions(1, 3), after.participantVersions().get(id));
+        assertThrows(UnsupportedOperationException.class, () -> before.participantVersions().clear());
+    }
+
+    @Test
+    void previewRejectsUnexpectedParticipantVersion() {
+        // given: 필요한 버전 정보 외에 다른 참여자의 버전이 포함되어 있다.
+        var players = participants();
+        var versions = versionsFor(players);
+        versions.put(UUID.randomUUID(), new ParticipantVersions(0, 0));
+
+        // when / then: 참가자 구성과 일치하지 않는 버전 맵을 거절한다.
+        assertThrows(IllegalArgumentException.class, () -> new TeamPreview(Game.LOL, players, versions));
     }
 
     @Test

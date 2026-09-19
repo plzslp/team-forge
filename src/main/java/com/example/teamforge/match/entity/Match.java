@@ -42,7 +42,7 @@ public class Match {
         this.id = Objects.requireNonNull(id);
         this.game = Objects.requireNonNull(game);
         this.confirmedAt = Objects.requireNonNull(confirmedAt);
-        validateTeams(participants);
+        validateTeams(game, participants);
         participants.forEach(p -> this.participants.add(p.copyForMatch()));
         this.result = result;
     }
@@ -56,12 +56,16 @@ public class Match {
         return this;
     }
 
-    /** 미리보기와 확정 기록에서 공유하는 기본 인원 검증. */
-    public static void validateTeams(List<MatchParticipant> participants) {
+    /** 미리보기와 확정 기록에서 공유하는 인원·게임별 포지션 검증. */
+    public static void validateTeams(Game game, List<MatchParticipant> participants) {
+        Objects.requireNonNull(game);
         if (participants.size() != 10
                 || participants.stream().map(MatchParticipant::getParticipantId).distinct().count() != 10
                 || participants.stream().filter(p -> p.getTeam() == MatchParticipant.Team.A).count() != 5) {
             throw new IllegalArgumentException("중복 없는 참가자 10명을 팀당 5명으로 구성해야 합니다.");
+        }
+        if (participants.stream().anyMatch(p -> !p.getAssignedPosition().supports(game))) {
+            throw new IllegalArgumentException("배정 포지션은 내전 게임에 속해야 합니다.");
         }
     }
 }

@@ -13,13 +13,13 @@ import java.util.stream.Collectors;
 public record TeamPreview(
         Game game,
         List<MatchParticipant> participants,
-        Map<UUID, Long> participantVersions
+        Map<UUID, ParticipantVersions> participantVersions
 ) {
     public TeamPreview {
         Objects.requireNonNull(game);
         participants = List.copyOf(participants);
         participantVersions = Map.copyOf(participantVersions);
-        Match.validateTeams(participants);
+        Match.validateTeams(game, participants);
         if (!participantVersions.keySet().equals(participants.stream()
                 .map(MatchParticipant::getParticipantId).collect(Collectors.toSet()))) {
             throw new IllegalArgumentException("참가자별 변경 감지 버전이 필요합니다.");

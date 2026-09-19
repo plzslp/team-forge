@@ -26,7 +26,8 @@ com.example.teamforge
 │   ├── service                 # 패키지 안내만 존재, 구현 예정
 │   ├── repository              # 패키지 안내만 존재, 구현 예정
 │   ├── dto
-│   │   └── TeamPreview         # 미저장 편성 결과 record
+│   │   ├── TeamPreview         # 미저장 편성 결과 record
+│   │   └── ParticipantVersions # 참여자·프로필 버전 쌍 record
 │   └── entity
 │       ├── Match
 │       ├── MatchParticipant
@@ -51,7 +52,7 @@ com.example.teamforge
 
 `Game`은 참여자 게임 프로필에서 정의하며 match에서도 같은 enum을 사용한다. `TeamPreview`는 현재 내부 처리 결과이며 `MatchParticipant` 목록을 담는다. 향후 HTTP API에서는 필요한 필드만 담은 응답 DTO를 정의하고 JPA Entity를 그대로 직렬화하지 않는다.
 
-`Match.validateTeams`는 미리보기와 확정 기록이 공유하는 인원·중복·5:5 검증이다. 실제 포지션 배정과 점수 차이 최소화 알고리즘은 이후 `match.service` 아래 별도 계산 클래스로 구현해 HTTP·DB 없이 테스트한다.
+`Match.validateTeams(game, participants)`는 미리보기와 확정 기록이 공유하는 인원·중복·5:5·게임과 배정 포지션 일치 검증이다. 실제 포지션 배정과 점수 차이 최소화 알고리즘은 이후 `match.service` 아래 별도 계산 클래스로 구현해 HTTP·DB 없이 테스트한다.
 
 ## 외부 API 분리
 
@@ -103,9 +104,9 @@ Spring Modulith core/JPA/runtime/test와 BOM을 제거했다. 현재 사용하�
 5. 확정 시 최신 정보 검증·스냅샷 저장·경기 결과·최근 내전 조회를 구현한다.
 6. Riot API를 실제로 연동한다.
 
-현재 버전 맵은 형태만 정의했다. 미리보기 이후 참여자·프로필·삭제 상태 변경을 모두 감지하도록 양쪽 Entity 버전을 전달하고, 검증과 저장 사이 경쟁 상태를 트랜잭션·잠금으로 처리해야 한다. 각 Entity의 `@Version`만으로 전체 변경 감지가 완성되는 것은 아니다.
+미리보기의 `participantVersions`는 참가자 UUID마다 `ParticipantVersions(participantVersion, profileVersion)`를 보관한다. 참여자와 해당 게임 프로필의 독립적인 버전을 모두 표현하며, 원본 맵은 복사하고 참가자 목록과 키가 일치하는지 검증한다. 확정 서비스는 아직 없으므로 최신 DB 버전 비교는 미구현이다. 향후 두 버전과 활성 상태를 서버에서 확인하고, 검증과 저장 사이 경쟁 상태를 트랜잭션·잠금으로 처리해야 한다. 버전 값을 보관하는 것만으로 오래된 정보의 확정을 방지하지는 않는다.
 
-Match/TeamPreview의 검증은 인원·중복·5:5까지만 구현됐다. 포지션 구성과 비선호 배정 승인은 미구현이다. 티어·LP 원본, 조회 시각, 계정 유일성과 UUID 참조 무결성도 후속 설계 대상이다. 백엔드는 `OVERWATCH`, 프론트는 `OW`를 사용하므로 API 연결 시 통일 또는 변환이 필요하다.
+Match/TeamPreview는 인원·중복·5:5와 배정 포지션이 해당 게임에 속하는지 검증한다. 팀별 역할 구성과 비선호 배정 승인은 미구현이다. 티어·LP 원본, 조회 시각, 계정 유일성과 UUID 참조 무결성도 후속 설계 대상이다. 백엔드는 `OVERWATCH`, 프론트는 `OW`를 사용하므로 API 연결 시 통일 또는 변환이 필요하다.
 
 ## 검증
 
