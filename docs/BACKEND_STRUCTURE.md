@@ -85,7 +85,7 @@ Spring Boot 4.1.1, Java 17과 기존 플러그인 버전은 유지한다. 라이
 |---|---|
 | Web MVC starter | REST API 기반, implementation |
 | Data JPA starter | JPA Entity와 저장소 기반, implementation |
-| Flyway starter | DB 마이그레이션 기반, implementation. 실제 스크립트는 아직 없음 |
+| Flyway starter | 초기 스키마와 외래 키 마이그레이션 실행, implementation |
 | Flyway PostgreSQL 지원·PostgreSQL JDBC | 운영 DB 지원, runtimeOnly |
 | H2 | 로컬 실행·테스트 DB, runtimeOnly. 현재 실행 호환성을 위해 유지하며 bootJar에도 포함 |
 | H2 console | developmentOnly, 운영 bootJar에서 제외 |
@@ -97,7 +97,7 @@ Spring Modulith core/JPA/runtime/test와 BOM을 제거했다. 현재 사용하�
 
 ## 남은 구현과 주의점
 
-1. DB 스키마·Flyway 마이그레이션과 환경별 설정을 확정한다.
+1. PostgreSQL 운영 연결과 환경별 설정을 확정한다. 이후 스키마 변경은 후속 Flyway 마이그레이션으로 관리한다.
 2. 참여자 등록·조회 기능을 controller → service → repository → DB 순서로 연결한다.
 3. 게임 프로필 수정·수동 보정·Soft Delete 기능을 연결한다.
 4. 포지션 우선 편성 알고리즘과 비선호 배정 승인 검증을 구현한다.
@@ -106,7 +106,7 @@ Spring Modulith core/JPA/runtime/test와 BOM을 제거했다. 현재 사용하�
 
 미리보기의 `participantVersions`는 참가자 UUID마다 `ParticipantVersions(participantVersion, profileVersion)`를 보관한다. 참여자와 해당 게임 프로필의 독립적인 버전을 모두 표현하며, 원본 맵은 복사하고 참가자 목록과 키가 일치하는지 검증한다. 확정 서비스는 아직 없으므로 최신 DB 버전 비교는 미구현이다. 향후 두 버전과 활성 상태를 서버에서 확인하고, 검증과 저장 사이 경쟁 상태를 트랜잭션·잠금으로 처리해야 한다. 버전 값을 보관하는 것만으로 오래된 정보의 확정을 방지하지는 않는다.
 
-Match/TeamPreview는 인원·중복·5:5와 배정 포지션이 해당 게임에 속하는지 검증한다. 팀별 역할 구성과 비선호 배정 승인은 미구현이다. 티어·LP 원본, 조회 시각, 계정 유일성과 UUID 참조 무결성도 후속 설계 대상이다. 백엔드는 `OVERWATCH`, 프론트는 `OW`를 사용하므로 API 연결 시 통일 또는 변환이 필요하다.
+Match/TeamPreview는 인원·중복·5:5와 배정 포지션이 해당 게임에 속하는지 검증한다. 팀별 역할 구성과 비선호 배정 승인은 미구현이다. 티어·LP 원본, 조회 시각과 계정 유일성도 후속 설계 대상이다. 참여자 UUID 참조의 존재 여부는 DB 외래 키로 보장한다. 백엔드는 `OVERWATCH`, 프론트는 `OW`를 사용하므로 API 연결 시 통일 또는 변환이 필요하다.
 
 ## 검증
 
@@ -126,4 +126,23 @@ ParticipantEntityTests·MatchEntityTests로 기존 모델 규칙, JpaModelTests�
 
 GameProfile의 선호 포지션은 `Set<Position>`, MatchParticipant의 배정 포지션은 `Position`이다. GameProfile은 비어 있는 선택과 다른 게임의 포지션을 거절한다. 두 필드 모두 `@Enumerated(EnumType.STRING)`으로 이름을 저장한다.
 
-기존 문자열 데이터가 있다면 게임에 따라 `TOP` → `LOL_TOP`, `SUPPORT` → `LOL_SUPPORT` 또는 `OVERWATCH_SUPPORT` 등으로 변환해야 한다. 운영 DB 마이그레이션은 아직 없으며 이번 테스트는 새 H2 스키마에서 검증한다. 프론트의 기존 포지션 문자열은 API 연결 시 변환한다. enum 도입만으로 팀의 포지션 구성·비선호 배정 승인 검증이 완성되는 것은 아니다.
+기존 문자열 데이터가 있다면 게임에 따라 `TOP` → `LOL_TOP`, `SUPPORT` → `LOL_SUPPORT` 또는 `OVERWATCH_SUPPORT` 등으로 변환해야 한다. 초기 Flyway 마이그레이션은 빈 DB를 대상으로 하며 기존 데이터 변환은 포함하지 않는다. 프론트의 기존 포지션 문자열은 API 연결 시 변환한다. enum 도입만으로 팀의 포지션 구성·비선호 배정 승인 검증이 완성되는 것은 아니다.
+
+## DB 외래 키와 스키마 관리
+
+내전 기록의 생성 시각은 `Match.createdAt` / `matches.created_at`으로 저장한다. 생성자에 전달한 시각을 사용하며 자동 시각 생성은 하지 않는다. 초기 개발 단계이므로 V1에서 `created_at`을 직접 정의한다. 수정 전 V1을 적용한 개발 DB를 재사용하면 Flyway 체크섬이 일치하지 않으므로, 데이터가 불필요한 개발 DB에 한해 초기화 후 적용한다.
+
+`src/main/resources/db/migration/V1__create_initial_schema.sql`에서 초기 테이블과 제약을 생성한다. Hibernate는 `ddl-auto=validate`로 매핑을 확인하고 스키마를 생성·변경하지 않는다. 로컬 H2와 JPA 통합 테스트도 Flyway로 같은 스크립트를 실행한다.
+
+| 자식 컬럼 | 참조 대상 | 제약 이름 |
+|---|---|---|
+| game_profiles.participant_id | participants.id | fk_game_profiles_participant |
+| match_participants.participant_id | participants.id | fk_match_participants_participant |
+| game_profile_positions.profile_id | game_profiles.id | fk_game_profile_positions_profile |
+| match_participants.match_id | matches.id | fk_match_participants_match |
+
+Java의 참여자 참조 필드는 UUID로 유지한다. DB FK는 JPA 객체 연관관계 없이도 존재하지 않는 참여자 ID의 저장을 막는다. 참조 중인 부모 행은 `ON DELETE RESTRICT`로 물리 삭제를 거절하며, 참여자의 Soft Delete와 과거 스냅샷 보존은 그대로 동작한다. FK는 참여자의 활성 여부까지 검사하지 않으므로 서비스에서 별도 확인해야 한다.
+
+초기 SQL은 H2·PostgreSQL에서 사용할 수 있는 UUID, VARCHAR, TIMESTAMP WITH TIME ZONE 타입으로 작성한다. 기존 스키마에 자동 baseline하거나 데이터를 삭제하지 않는다. 이미 데이터가 있는 DB는 별도의 전환 계획이 필요하다. 운영 PostgreSQL 연결 설정은 아직 포함하지 않는다.
+
+`ForeignKeyTests`는 SQL 직접 삽입·삭제에도 FK가 적용되는지와 Soft Delete 후 프로필·스냅샷이 유지되는지 검증한다. 기존 JPA 저장 테스트도 실제 참여자를 먼저 저장하도록 구성한다.

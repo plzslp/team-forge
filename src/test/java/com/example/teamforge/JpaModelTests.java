@@ -19,9 +19,7 @@ import java.util.stream.IntStream;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:h2:mem:model-test;DB_CLOSE_DELAY=-1",
-        "spring.jpa.hibernate.ddl-auto=create-drop",
-        "spring.flyway.enabled=false"
+        "spring.datasource.url=jdbc:h2:mem:model-test;DB_CLOSE_DELAY=-1"
 })
 @Transactional
 class JpaModelTests {
@@ -63,7 +61,7 @@ class JpaModelTests {
     void matchCascadesSnapshotsAndEmbedsOptionalResult() {
         // given: 참가자 10명과 경기 결과가 없는 내전을 준비한다.
         var players = IntStream.range(0, 10).mapToObj(i -> new MatchParticipant(
-                UUID.randomUUID(), "참가자" + i, 1000, Position.LOL_TOP,
+                persistParticipant("참가자" + i).getId(), "참가자" + i, 1000, Position.LOL_TOP,
                 i < 5 ? MatchParticipant.Team.A : MatchParticipant.Team.B)).toList();
         var match = new Match(UUID.randomUUID(), Game.LOL, Instant.EPOCH, players, null);
         // when: 내전을 저장하고 영속성 컨텍스트를 비운다.
@@ -73,6 +71,7 @@ class JpaModelTests {
 
         // then: 참가자도 함께 저장되고 경기 결과는 비어 있다.
         var loaded = em.find(Match.class, match.getId());
+        assertEquals(Instant.EPOCH, loaded.getCreatedAt());
         assertEquals(10, loaded.getParticipants().size());
         assertTrue(loaded.getParticipants().stream()
                 .allMatch(player -> player.getAssignedPosition() == Position.LOL_TOP));
@@ -95,7 +94,7 @@ class JpaModelTests {
         var profile = new GameProfile(participant.getId(), Game.OVERWATCH, null, 1000, null,
                 Set.of(Position.OVERWATCH_SUPPORT));
         var players = IntStream.range(0, 10).mapToObj(i -> new MatchParticipant(
-                i == 0 ? participant.getId() : UUID.randomUUID(), "참가자" + i, 1000,
+                i == 0 ? participant.getId() : persistParticipant("참가자" + i).getId(), "참가자" + i, 1000,
                 Position.OVERWATCH_SUPPORT, i < 5 ? MatchParticipant.Team.A : MatchParticipant.Team.B)).toList();
         var match = new Match(UUID.randomUUID(), Game.OVERWATCH, Instant.EPOCH, players, null);
 
@@ -117,5 +116,10 @@ class JpaModelTests {
         assertEquals("OVERWATCH_SUPPORT", em.createNativeQuery(
                 "select assigned_position from match_participants where match_id = :id", String.class)
                 .setParameter("id", match.getId()).getResultList().get(0));
+    }
+    private Participant persistParticipant(String name) {
+        var participant = Participant.register(name);
+        em.persist(participant);
+        return participant;
     }
 }
