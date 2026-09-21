@@ -24,7 +24,7 @@ public class Match {
     private Game game;
 
     @Column(nullable = false)
-    private Instant confirmedAt;
+    private Instant createdAt;
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
     @JoinColumn(name = "match_id", nullable = false)
@@ -38,10 +38,10 @@ public class Match {
     private Long version;
 
     /** 포지션 정책과 최신 정보 검증은 후속 확정 서비스에서 수행한다. */
-    public Match(UUID id, Game game, Instant confirmedAt, List<MatchParticipant> participants, MatchResult result) {
+    public Match(UUID id, Game game, Instant createdAt, List<MatchParticipant> participants, MatchResult result) {
         this.id = Objects.requireNonNull(id);
         this.game = Objects.requireNonNull(game);
-        this.confirmedAt = Objects.requireNonNull(confirmedAt);
+        this.createdAt = Objects.requireNonNull(createdAt);
         validateTeams(game, participants);
         participants.forEach(p -> this.participants.add(p.copyForMatch()));
         this.result = result;

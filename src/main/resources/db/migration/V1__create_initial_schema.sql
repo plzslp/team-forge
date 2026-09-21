@@ -29,7 +29,7 @@ CREATE TABLE game_profile_positions (
 CREATE TABLE matches (
     id UUID PRIMARY KEY,
     game VARCHAR(255) NOT NULL,
-    confirmed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     result_score_a INTEGER,
     result_score_b INTEGER,
     result_memo VARCHAR(2000),

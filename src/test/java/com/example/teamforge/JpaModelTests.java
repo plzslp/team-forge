@@ -71,6 +71,7 @@ class JpaModelTests {
 
         // then: 참가자도 함께 저장되고 경기 결과는 비어 있다.
         var loaded = em.find(Match.class, match.getId());
+        assertEquals(Instant.EPOCH, loaded.getCreatedAt());
         assertEquals(10, loaded.getParticipants().size());
         assertTrue(loaded.getParticipants().stream()
                 .allMatch(player -> player.getAssignedPosition() == Position.LOL_TOP));

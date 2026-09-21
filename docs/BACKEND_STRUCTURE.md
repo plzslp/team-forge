@@ -130,6 +130,8 @@ GameProfile의 선호 포지션은 `Set<Position>`, MatchParticipant의 배정 �
 
 ## DB 외래 키와 스키마 관리
 
+내전 기록의 생성 시각은 `Match.createdAt` / `matches.created_at`으로 저장한다. 생성자에 전달한 시각을 사용하며 자동 시각 생성은 하지 않는다. 초기 개발 단계이므로 V1에서 `created_at`을 직접 정의한다. 수정 전 V1을 적용한 개발 DB를 재사용하면 Flyway 체크섬이 일치하지 않으므로, 데이터가 불필요한 개발 DB에 한해 초기화 후 적용한다.
+
 `src/main/resources/db/migration/V1__create_initial_schema.sql`에서 초기 테이블과 제약을 생성한다. Hibernate는 `ddl-auto=validate`로 매핑을 확인하고 스키마를 생성·변경하지 않는다. 로컬 H2와 JPA 통합 테스트도 Flyway로 같은 스크립트를 실행한다.
 
 | 자식 컬럼 | 참조 대상 | 제약 이름 |
