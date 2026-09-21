@@ -1,5 +1,8 @@
 package com.example.teamforge.participant.entity;
 
+import com.example.teamforge.common.exception.BusinessException;
+import com.example.teamforge.common.exception.ErrorCode;
+
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -34,9 +37,9 @@ public class Participant {
     }
 
     public Participant rename(String name) {
-        if (!active()) throw new IllegalStateException("삭제된 참여자는 수정할 수 없습니다.");
+        if (!active()) throw new BusinessException(ErrorCode.PARTICIPANT_DELETED);
         if (name == null || name.isBlank() || name.strip().length() > 20) {
-            throw new IllegalArgumentException("이름은 공백이 아닌 1~20자여야 합니다.");
+            throw new BusinessException(ErrorCode.INVALID_PARTICIPANT_NAME);
         }
         this.name = name.strip();
         return this;

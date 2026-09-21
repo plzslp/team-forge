@@ -93,7 +93,7 @@ Spring Boot 4.1.1, Java 17과 기존 플러그인 버전은 유지한다. 라이
 | Spring Boot test starter | 현재 단위·SpringBootTest 통합 테스트, testImplementation |
 | JUnit platform launcher | 테스트 실행, testRuntimeOnly |
 
-Spring Modulith core/JPA/runtime/test와 BOM을 제거했다. 현재 사용하지 않는 JPA·Flyway·Web MVC 테스트 전용 starter, 테스트용 Lombok 설정도 제거했다. 향후 테스트 슬라이스를 실제로 사용할 때 해당 starter를 추가한다.
+Spring Modulith core/JPA/runtime/test와 BOM을 제거했다. 사용하지 않는 JPA·Flyway 테스트 전용 starter, 테스트용 Lombok 설정도 제거했다. 공통 예외 응답의 MVC 테스트를 위해 Web MVC 테스트 starter를 사용하며, 요청 DTO의 Bean Validation을 위해 Validation starter를 사용한다.
 
 ## 남은 구현과 주의점
 
@@ -146,3 +146,34 @@ Java의 참여자 참조 필드는 UUID로 유지한다. DB FK는 JPA 객체 연
 초기 SQL은 H2·PostgreSQL에서 사용할 수 있는 UUID, VARCHAR, TIMESTAMP WITH TIME ZONE 타입으로 작성한다. 기존 스키마에 자동 baseline하거나 데이터를 삭제하지 않는다. 이미 데이터가 있는 DB는 별도의 전환 계획이 필요하다. 운영 PostgreSQL 연결 설정은 아직 포함하지 않는다.
 
 `ForeignKeyTests`는 SQL 직접 삽입·삭제에도 FK가 적용되는지와 Soft Delete 후 프로필·스냅샷이 유지되는지 검증한다. 기존 JPA 저장 테스트도 실제 참여자를 먼저 저장하도록 구성한다.
+
+## 공통 예외 처리
+
+`common.exception`에 다음 네 타입을 둔다.
+
+| 타입 | 역할 |
+|---|---|
+| ErrorCode | 오류 식별 enum, HTTP 상태, 공개 메시지 |
+| BusinessException | 예상 가능한 업무 규칙 위반과 해당 ErrorCode 전달 |
+| ErrorResponse | `code`, `message`로 구성한 JSON 응답 record |
+| GlobalExceptionHandler | `@RestControllerAdvice`로 MVC 오류 응답 통일 |
+
+기존 모델의 명시적인 이름·점수·포지션·편성·결과·버전 검증은 BusinessException을 사용한다. ErrorCode는 업무 패키지를 참조하지 않는다. `Objects.requireNonNull` 같은 내부 계약 검사와 불변 컬렉션의 예외까지 업무 예외로 바꾸지는 않는다. HTTP 입력값은 DTO에서 `@Valid`와 Bean Validation으로 검증한다.
+
+```json
+{
+  "code": "INVALID_PARTICIPANT_NAME",
+  "message": "이름은 공백이 아닌 1~20자여야 합니다."
+}
+```
+
+- 업무 입력 오류와 잘못된 JSON·파라미터·Bean Validation: 400
+- 삭제된 참여자 수정: 409 / PARTICIPANT_DELETED
+- Spring Data 제약 위반: 409 / DATA_CONFLICT
+- Spring Data 낙관적 잠금 충돌: 409 / CONCURRENT_MODIFICATION
+- 미존재 경로·메서드·미디어 타입: Spring MVC가 결정한 404·405·415 등 상태와 표준 헤더 유지
+- 예상하지 못한 예외: 서버에 오류 로그를 남기고 500 / INTERNAL_SERVER_ERROR 반환
+
+내부 예외 메시지, SQL, 거절된 입력값과 스택 트레이스는 응답에 포함하지 않는다. 입력 오류의 필드별 상세 목록은 현재 제공하지 않는다. Spring MVC가 처리하는 예외는 ResponseEntityExceptionHandler를 통해 처리하며, 필터·서블릿 컨테이너 밖의 오류나 비동기 작업 오류까지 처리하는 구조는 아니다.
+
+아직 운영 Controller는 없으며 `GlobalExceptionHandlerTests`의 테스트 전용 컨트롤러와 MockMvc로 오류 응답을 검증한다. 엔티티 단위 테스트에서는 예외 타입과 ErrorCode를 함께 확인한다. API 구현 시 서비스에서 업무 예외를 그대로 전달하고, repository의 데이터 접근 예외는 공통 처리기로 전달한다.

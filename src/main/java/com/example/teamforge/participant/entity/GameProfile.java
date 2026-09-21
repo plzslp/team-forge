@@ -1,5 +1,8 @@
 package com.example.teamforge.participant.entity;
 
+import com.example.teamforge.common.exception.BusinessException;
+import com.example.teamforge.common.exception.ErrorCode;
+
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -59,7 +62,7 @@ public class GameProfile {
     public void changePreferredPositions(Set<Position> positions) {
         Set<Position> copy = Set.copyOf(positions);
         if (copy.isEmpty() || copy.stream().anyMatch(position -> !position.supports(game))) {
-            throw new IllegalArgumentException("게임에 맞는 선호 포지션을 하나 이상 선택하세요.");
+            throw new BusinessException(ErrorCode.INVALID_PREFERRED_POSITION);
         }
         preferredPositions.clear();
         preferredPositions.addAll(copy);
@@ -70,14 +73,14 @@ public class GameProfile {
     }
 
     public GameProfile overrideScore(Integer score) {
-        if (score != null && score < 0) throw new IllegalArgumentException("점수는 음수일 수 없습니다.");
+        if (score != null && score < 0) throw new BusinessException(ErrorCode.INVALID_SCORE);
         this.manualScore = score;
         return this;
     }
 
     /** 조회 성공 시에만 호출하며 기존 수동 보정은 유지한다. */
     public GameProfile refreshScore(int score) {
-        if (score < 0) throw new IllegalArgumentException("점수는 음수일 수 없습니다.");
+        if (score < 0) throw new BusinessException(ErrorCode.INVALID_SCORE);
         this.baseScore = score;
         return this;
     }

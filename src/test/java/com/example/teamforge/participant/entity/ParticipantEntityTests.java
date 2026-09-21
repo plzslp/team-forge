@@ -1,5 +1,9 @@
 package com.example.teamforge.participant.entity;
 
+import com.example.teamforge.common.exception.BusinessException;
+import com.example.teamforge.common.exception.ErrorCode;
+import org.junit.jupiter.api.function.Executable;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -23,14 +27,14 @@ class ParticipantEntityTests {
         assertEquals("친구", deleted.getName());
         assertFalse(deleted.active());
         // when / then: 삭제된 참여자의 이름을 변경하면 예외가 발생한다.
-        assertThrows(IllegalStateException.class, () -> deleted.rename("다른 이름"));
+        assertBusinessError(ErrorCode.PARTICIPANT_DELETED, () -> deleted.rename("다른 이름"));
     }
 
     @Test
     void blankNameIsRejected() {
         // given: 공백으로만 된 이름을 입력한다.
         // when / then: 등록을 시도하면 예외가 발생한다.
-        assertThrows(IllegalArgumentException.class, () -> Participant.register("   "));
+        assertBusinessError(ErrorCode.INVALID_PARTICIPANT_NAME, () -> Participant.register("   "));
     }
 
     @Test
@@ -52,7 +56,7 @@ class ParticipantEntityTests {
     void invalidPositionIsRejected() {
         // given: 롤 프로필에 오버워치 포지션인 TANK를 입력한다.
         // when / then: 프로필을 생성하면 예외가 발생한다.
-        assertThrows(IllegalArgumentException.class, () ->
+        assertBusinessError(ErrorCode.INVALID_PREFERRED_POSITION, () ->
                 new GameProfile(UUID.randomUUID(), Game.LOL, null, 0, null, Set.of(Position.OVERWATCH_TANK)));
     }
 
@@ -73,7 +77,7 @@ class ParticipantEntityTests {
         assertEquals(Set.of(position), profile.getPreferredPositions());
 
         // when / then: 다른 게임의 프로필은 해당 포지션을 거절한다.
-        assertThrows(IllegalArgumentException.class, () ->
+        assertBusinessError(ErrorCode.INVALID_PREFERRED_POSITION, () ->
                 new GameProfile(UUID.randomUUID(), otherGame, null, 0, null, Set.of(position)));
     }
 
@@ -84,9 +88,23 @@ class ParticipantEntityTests {
                 Set.of(Position.LOL_SUPPORT));
 
         // when / then: 다른 게임의 서포터나 빈 목록으로 변경하면 거절하고 기존 값을 유지한다.
-        assertThrows(IllegalArgumentException.class, () ->
+        assertBusinessError(ErrorCode.INVALID_PREFERRED_POSITION, () ->
                 profile.changePreferredPositions(Set.of(Position.OVERWATCH_SUPPORT)));
-        assertThrows(IllegalArgumentException.class, () -> profile.changePreferredPositions(Set.of()));
+        assertBusinessError(ErrorCode.INVALID_PREFERRED_POSITION, () -> profile.changePreferredPositions(Set.of()));
         assertEquals(Set.of(Position.LOL_SUPPORT), profile.getPreferredPositions());
+    }
+    @Test
+    void negativeScoreUsesBusinessErrorAndPreservesScore() {
+        // given: 유효한 점수의 프로필을 준비한다.
+        var profile = new GameProfile(UUID.randomUUID(), Game.LOL, null, 1000, null, Set.of(Position.LOL_TOP));
+
+        // when / then: 음수 환산·수동 점수를 거절하고 기존 점수를 유지한다.
+        assertBusinessError(ErrorCode.INVALID_SCORE, () -> profile.refreshScore(-1));
+        assertBusinessError(ErrorCode.INVALID_SCORE, () -> profile.overrideScore(-1));
+        assertEquals(1000, profile.effectiveScore());
+    }
+
+    private void assertBusinessError(ErrorCode expected, Executable action) {
+        assertEquals(expected, assertThrows(BusinessException.class, action).getErrorCode());
     }
 }

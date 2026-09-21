@@ -1,5 +1,8 @@
 package com.example.teamforge.match.dto;
 
+import com.example.teamforge.common.exception.BusinessException;
+import com.example.teamforge.common.exception.ErrorCode;
+
 import com.example.teamforge.participant.entity.Game;
 import com.example.teamforge.match.entity.Match;
 import com.example.teamforge.match.entity.MatchParticipant;
@@ -22,7 +25,7 @@ public record TeamPreview(
         Match.validateTeams(game, participants);
         if (!participantVersions.keySet().equals(participants.stream()
                 .map(MatchParticipant::getParticipantId).collect(Collectors.toSet()))) {
-            throw new IllegalArgumentException("참가자별 변경 감지 버전이 필요합니다.");
+            throw new BusinessException(ErrorCode.PREVIEW_PARTICIPANTS_MISMATCH);
         }
     }
 }

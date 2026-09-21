@@ -1,5 +1,8 @@
 package com.example.teamforge.match.entity;
 
+import com.example.teamforge.common.exception.BusinessException;
+import com.example.teamforge.common.exception.ErrorCode;
+
 import com.example.teamforge.participant.entity.Game;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -62,10 +65,10 @@ public class Match {
         if (participants.size() != 10
                 || participants.stream().map(MatchParticipant::getParticipantId).distinct().count() != 10
                 || participants.stream().filter(p -> p.getTeam() == MatchParticipant.Team.A).count() != 5) {
-            throw new IllegalArgumentException("중복 없는 참가자 10명을 팀당 5명으로 구성해야 합니다.");
+            throw new BusinessException(ErrorCode.INVALID_TEAM_COMPOSITION);
         }
         if (participants.stream().anyMatch(p -> !p.getAssignedPosition().supports(game))) {
-            throw new IllegalArgumentException("배정 포지션은 내전 게임에 속해야 합니다.");
+            throw new BusinessException(ErrorCode.POSITION_GAME_MISMATCH);
         }
     }
 }
