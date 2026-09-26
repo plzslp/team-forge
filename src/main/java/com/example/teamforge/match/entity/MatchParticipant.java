@@ -1,5 +1,8 @@
 package com.example.teamforge.match.entity;
 
+import com.example.teamforge.common.exception.BusinessException;
+import com.example.teamforge.common.exception.ErrorCode;
+
 import com.example.teamforge.participant.entity.Position;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -42,7 +45,7 @@ public class MatchParticipant {
         this.participantId = Objects.requireNonNull(participantId);
         this.team = Objects.requireNonNull(team);
         if (name == null || name.isBlank() || assignedPosition == null || score < 0) {
-            throw new IllegalArgumentException("참가자 스냅샷 값이 올바르지 않습니다.");
+            throw new BusinessException(ErrorCode.INVALID_MATCH_PARTICIPANT);
         }
         this.name = name;
         this.score = score;

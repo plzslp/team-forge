@@ -1,5 +1,9 @@
 package com.example.teamforge.match.entity;
 
+import com.example.teamforge.common.exception.BusinessException;
+import com.example.teamforge.common.exception.ErrorCode;
+import org.junit.jupiter.api.function.Executable;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -38,9 +42,9 @@ class MatchEntityTests {
         var versions = versionsFor(players);
 
         // when / then: 확정 기록과 미리보기 모두 게임 불일치를 거절한다.
-        assertThrows(IllegalArgumentException.class, () ->
+        assertBusinessError(ErrorCode.POSITION_GAME_MISMATCH, () ->
                 new Match(UUID.randomUUID(), game, Instant.EPOCH, players, null));
-        assertThrows(IllegalArgumentException.class, () -> new TeamPreview(game, players, versions));
+        assertBusinessError(ErrorCode.POSITION_GAME_MISMATCH, () -> new TeamPreview(game, players, versions));
     }
 
     private Map<UUID, ParticipantVersions> versionsFor(List<MatchParticipant> players) {
@@ -77,14 +81,14 @@ class MatchEntityTests {
         versions.put(UUID.randomUUID(), new ParticipantVersions(0, 0));
 
         // when / then: 참가자 구성과 일치하지 않는 버전 맵을 거절한다.
-        assertThrows(IllegalArgumentException.class, () -> new TeamPreview(Game.LOL, players, versions));
+        assertBusinessError(ErrorCode.PREVIEW_PARTICIPANTS_MISMATCH, () -> new TeamPreview(Game.LOL, players, versions));
     }
 
     @Test
     void invalidTeamSizeIsRejected() {
         // given: 참가자가 없는 목록을 입력한다.
         // when / then: 내전을 생성하면 인원 검증에서 예외가 발생한다.
-        assertThrows(IllegalArgumentException.class, () ->
+        assertBusinessError(ErrorCode.INVALID_TEAM_COMPOSITION, () ->
                 new Match(UUID.randomUUID(), Game.LOL, Instant.EPOCH, List.of(), null));
     }
 
@@ -94,7 +98,7 @@ class MatchEntityTests {
         var players = new ArrayList<>(participants());
         players.set(1, players.get(0));
         // when / then: 내전을 생성하면 중복 검증에서 예외가 발생한다.
-        assertThrows(IllegalArgumentException.class, () ->
+        assertBusinessError(ErrorCode.INVALID_TEAM_COMPOSITION, () ->
                 new Match(UUID.randomUUID(), Game.LOL, Instant.EPOCH, players, null));
     }
 
@@ -123,7 +127,24 @@ class MatchEntityTests {
     void previewRequiresVersionsForEveryParticipant() {
         // given: 참가자 10명과 비어 있는 버전 맵을 입력한다.
         // when / then: 미리보기를 생성하면 버전 누락으로 예외가 발생한다.
-        assertThrows(IllegalArgumentException.class, () ->
+        assertBusinessError(ErrorCode.PREVIEW_PARTICIPANTS_MISMATCH, () ->
                 new TeamPreview(Game.LOL, participants(), Map.of()));
+    }
+    @Test
+    void invalidResultAndSnapshotUseSpecificErrorCodes() {
+        // given: 잘못된 경기 점수, 메모와 스냅샷 입력을 준비한다.
+        String oversizedMemo = "x".repeat(2001);
+
+        // when / then: 각 업무 규칙에 해당하는 오류 코드를 반환한다.
+        assertBusinessError(ErrorCode.INVALID_MATCH_SCORE, () -> new MatchResult(-1, 0, null));
+        assertBusinessError(ErrorCode.INVALID_MATCH_MEMO, () -> new MatchResult(0, 0, oversizedMemo));
+        assertBusinessError(ErrorCode.INVALID_MATCH_PARTICIPANT, () ->
+                new MatchParticipant(UUID.randomUUID(), "", 0, Position.LOL_TOP, MatchParticipant.Team.A));
+        assertBusinessError(ErrorCode.INVALID_PREVIEW_VERSION, () -> new ParticipantVersions(-1, 0));
+        assertBusinessError(ErrorCode.INVALID_PREVIEW_VERSION, () -> new ParticipantVersions(0, -1));
+    }
+
+    private void assertBusinessError(ErrorCode expected, Executable action) {
+        assertEquals(expected, assertThrows(BusinessException.class, action).getErrorCode());
     }
 }
