@@ -58,6 +58,16 @@ npm.cmd run build
 
 결과물은 각각 `build/libs/`, `frontend/dist/`에 생성됩니다. 프론트 빌드 결과는 아직 백엔드 JAR에 포함되지 않습니다.
 
+## 테스트 커버리지
+
+백엔드 테스트 실행 시 JaCoCo 보고서가 `build/reports/jacoco/test/`에 생성됩니다.
+`html/index.html`은 로컬 확인용이며, `jacocoTestReport.xml`은 Codecov 업로드용입니다.
+
+GitHub Actions는 `dev`·`main` 대상 PR과 해당 브랜치의 push에서 테스트·JAR 빌드·커버리지 업로드를 실행합니다.
+Codecov에서 이 GitHub 저장소를 연결해야 하며, 업로드에는 OIDC 인증을 사용하므로 `CODECOV_TOKEN`은 필요하지 않습니다.
+포크 PR은 테스트와 보고서 생성만 실행하고 업로드는 생략합니다.
+커버리지는 초기에는 참고 지표로 사용하며, 수치에 따른 병합 제한은 두지 않습니다. 업로드 오류는 CI 실패로 처리합니다.
+
 ## 문서
 
 - [백엔드 구조](docs/BACKEND_STRUCTURE.md)
