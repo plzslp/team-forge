@@ -149,6 +149,8 @@ Java의 참여자 참조 필드는 UUID로 유지한다. DB FK는 JPA 객체 연
 
 ## 공통 예외 처리
 
+공통 오류 응답은 요청의 `Accept`와 무관하게 `Content-Type: application/json`으로 반환한다. XML처럼 지원하지 않는 응답 형식을 요구해도 원래 오류 상태와 `code`, `message`를 유지한다. Spring MVC 오류 헤더는 복사한 뒤 Content-Type만 지정하여 `Allow`, 지원 미디어 타입 등 기존 헤더를 보존한다. 정상 응답의 콘텐츠 협상은 변경하지 않는다.
+
 `common.exception`에 다음 네 타입을 둔다.
 
 | 타입 | 역할 |

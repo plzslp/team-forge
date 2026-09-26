@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -121,9 +122,83 @@ class GlobalExceptionHandlerTests {
                 .andExpect(jsonPath("$.code").doesNotExist());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"/test/json", "/test/negotiated"})
+    void unsupportedAcceptReturnsJsonError(String path) throws Exception {
+        // given: 매핑 단계 또는 응답 변환 단계에서 JSON만 제공하는 경로에 XML을 요구한다.
+        // when: 지원하지 않는 Accept 헤더로 요청한다.
+        var result = mvc.perform(get(path).accept(MediaType.APPLICATION_XML));
+
+        // then: 406 상태와 JSON 오류 본문이 유지된다.
+        result.andExpect(status().isNotAcceptable())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("NOT_ACCEPTABLE"))
+                .andExpect(jsonPath("$.message").value(ErrorCode.NOT_ACCEPTABLE.getMessage()));
+    }
+
+    @Test
+    void unsupportedRequestAndResponseTypesStillReturn415Json() throws Exception {
+        // given: JSON 엔드포인트에 텍스트를 보내면서 XML 응답을 요구한다.
+        // when: 요청·응답 형식이 모두 지원되지 않는 요청을 전송한다.
+        var result = mvc.perform(post("/test/body").contentType(MediaType.TEXT_PLAIN)
+                .accept(MediaType.APPLICATION_XML).content("text"));
+
+        // then: 원래 415 상태와 지원 요청 형식 헤더, JSON 오류 본문을 보존한다.
+        result.andExpect(status().isUnsupportedMediaType())
+                .andExpect(header().string("Accept", containsString("application/json")))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("UNSUPPORTED_MEDIA_TYPE"))
+                .andExpect(jsonPath("$.message").value(ErrorCode.UNSUPPORTED_MEDIA_TYPE.getMessage()));
+    }
+
+    @Test
+    void xmlAcceptPreserves405AllowHeaderAndJsonBody() throws Exception {
+        // given: POST만 지원하는 경로에 XML 응답을 요구한다.
+        // when: GET으로 호출한다.
+        var result = mvc.perform(get("/test/body").accept(MediaType.APPLICATION_XML));
+
+        // then: Allow 헤더와 기존 상태를 유지하며 JSON 본문을 반환한다.
+        result.andExpect(status().isMethodNotAllowed())
+                .andExpect(header().string("Allow", containsString("POST")))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"))
+                .andExpect(jsonPath("$.message").value(ErrorCode.METHOD_NOT_ALLOWED.getMessage()));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "invalid-name, 400, INVALID_PARTICIPANT_NAME",
+            "deleted, 409, PARTICIPANT_DELETED",
+            "integrity, 409, DATA_CONFLICT",
+            "optimistic, 409, CONCURRENT_MODIFICATION",
+            "unexpected, 500, INTERNAL_SERVER_ERROR"
+    })
+    void xmlAcceptDoesNotHideApplicationErrors(String scenario, int status, ErrorCode code) throws Exception {
+        // given: 업무·저장·서버 오류가 발생하는 경로에 XML 응답을 요구한다.
+        // when: 오류를 발생시킨다.
+        var result = mvc.perform(get("/test/errors/" + scenario).accept(MediaType.APPLICATION_XML));
+
+        // then: 원래 오류 상태와 JSON 본문을 유지하고 내부 정보는 노출하지 않는다.
+        result.andExpect(status().is(status))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(code.name()))
+                .andExpect(jsonPath("$.message").value(code.getMessage()))
+                .andExpect(content().string(not(containsString("private-detail"))));
+    }
+
     // 테스트 소스에만 존재하며 운영 API로 등록되지 않는다.
     @RestController
     static class TestController {
+        @GetMapping(value = "/test/json", produces = MediaType.APPLICATION_JSON_VALUE)
+        Map<String, String> json() {
+            return Map.of("name", "참여자");
+        }
+
+        @GetMapping("/test/negotiated")
+        Map<String, String> negotiated() {
+            return Map.of("name", "참여자");
+        }
+
         @GetMapping("/test/errors/{scenario}")
         void fail(@PathVariable String scenario) {
             switch (scenario) {

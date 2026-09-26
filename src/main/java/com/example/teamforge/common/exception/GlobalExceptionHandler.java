@@ -6,6 +6,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -51,10 +52,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         if (status.is5xxServerError()) {
             log.error("Spring MVC 요청 처리 오류", exception);
         }
-        return super.handleExceptionInternal(exception, ErrorResponse.from(code), headers, status, request);
+        // 원본 헤더는 읽기 전용일 수 있으므로 복사하고, 오류 응답은 Accept와 무관하게 JSON으로 제공한다.
+        HttpHeaders responseHeaders = new HttpHeaders();
+        responseHeaders.putAll(headers);
+        responseHeaders.setContentType(MediaType.APPLICATION_JSON);
+        return super.handleExceptionInternal(exception, ErrorResponse.from(code), responseHeaders, status, request);
     }
 
     private ResponseEntity<ErrorResponse> response(ErrorCode code) {
-        return ResponseEntity.status(code.getStatus()).body(ErrorResponse.from(code));
+        return ResponseEntity.status(code.getStatus())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(ErrorResponse.from(code));
     }
 }
