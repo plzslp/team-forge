@@ -15,5 +15,5 @@ issues_user_guidelines = "리뷰 제목, 문제 설명, 영향과 수정 제안�
 compliance_user_guidelines = "규칙 준수 여부에 대한 리뷰 제목, 설명과 수정 제안은 한국어로 작성하세요. 코드 식별자, 파일 경로, API 이름은 원문을 유지하세요."
 
 [qodo_describe_agent]
-# 작성자가 입력한 PR 본문은 보존하고 변경사항 요약을 별도 댓글로 게시합니다.
-publish_mode = "comment"
+# 작성자 설명과 AI 요약을 구분하여 PR 본문에 게시합니다.
+publish_mode = "pr_description"

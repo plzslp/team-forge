@@ -1,5 +1,7 @@
 # TeamForge
 
+[![Codecov](https://codecov.io/gh/plzslp/team-forge/branch/dev/graph/badge.svg)](https://app.codecov.io/gh/plzslp/team-forge/tree/dev)
+
 롤·오버워치 내전 참가자 10명을 실력과 포지션을 고려해 5:5 팀으로 편성하는 개인용 웹 프로젝트입니다.
 
 현재 개발 초기 단계이며, 프론트엔드는 실제 API·DB와 연결되지 않은 데모입니다.
