@@ -15,7 +15,7 @@ com.example.teamforge
 │   ├── controller              # ParticipantApi / ParticipantController
 │   ├── service                 # ParticipantService
 │   ├── repository              # ParticipantRepository
-│   ├── dto                     # ParticipantCreateRequest / ParticipantResponse
+│   ├── dto                     # ParticipantCreateRequest / ParticipantUpdateRequest / ParticipantResponse
 │   └── entity
 │       ├── Game                # LOL / OVERWATCH enum
 │       ├── Position            # 게임 정보를 포함한 포지션 enum
@@ -36,7 +36,7 @@ com.example.teamforge
     └── riot                   # 패키지 안내만 존재, 실제 연동 예정
 ```
 
-참여자 등록·목록·상세 조회는 controller → service → repository → DB로 연결했다. 게임 프로필 API, 참여자 수정·삭제 API, 내전 API, Riot 통신과 실제 팀 편성 알고리즘은 아직 없다. 미구현 계층의 책임은 `package-info.java`로 남긴다.
+참여자 등록·목록·상세 조회·이름 수정·Soft Delete는 controller → service → repository → DB로 연결했다. 게임 프로필 API, 내전 API, Riot 통신과 실제 팀 편성 알고리즘은 아직 없다. 미구현 계층의 책임은 `package-info.java`로 남긴다.
 
 ### 참여자 API
 
@@ -45,10 +45,14 @@ com.example.teamforge
 | POST | `/api/participants` | 이름으로 등록, 201과 상세 조회 Location 반환 |
 | GET | `/api/participants` | 활성 참여자 목록, 이름·ID 오름차순, 없으면 빈 배열 |
 | GET | `/api/participants/{id}` | 활성 참여자 상세 조회, 없거나 삭제됐으면 404 |
+| PATCH | `/api/participants/{id}` | 이름 수정, 수정된 ID·이름 반환. 없으면 404, 삭제됐으면 409 |
+| DELETE | `/api/participants/{id}` | Soft Delete, 204 반환. 반복 삭제도 204, 없으면 404 |
 
 등록 요청은 `{"name":"참여자"}`, 응답은 `{"id":"UUID","name":"참여자"}`다. 이름은 `strip()`으로 앞뒤 공백을 제거한 뒤 공백이 아닌 1~20자인지 검증한다. 요청 DTO는 Bean Validation, 엔티티는 기존 업무 검증을 사용한다. HTTP 입력 오류는 공통 400 / INVALID_REQUEST 응답을 반환한다.
 
-ParticipantService의 조회는 읽기 전용 트랜잭션, 등록은 쓰기 트랜잭션으로 실행한다. 공개 조회는 repository의 `deletedAt IS NULL` 조건을 사용하고 JPA 엔티티 대신 응답 DTO를 반환한다. 동명이인 등록은 허용한다. 목록 페이징과 게임 프로필 정보는 아직 제공하지 않는다.
+수정 요청도 `{"name":"새 이름"}` 형태이며 등록과 동일한 이름 검증을 적용한다. 삭제는 `deletedAt`만 설정하며 참여자 행·게임 프로필·기존 경기 스냅샷을 유지한다. 반복 삭제 시 최초 삭제 시각을 유지한다.
+
+ParticipantService의 조회는 읽기 전용 트랜잭션, 등록·수정·삭제는 쓰기 트랜잭션으로 실행한다. 수정·삭제는 관리 상태의 엔티티를 변경하고 JPA 변경 감지로 저장한다. 공개 조회는 repository의 `deletedAt IS NULL` 조건을 사용하고 JPA 엔티티 대신 응답 DTO를 반환한다. 동명이인 등록은 허용한다. 목록 페이징과 게임 프로필 정보는 아직 제공하지 않는다.
 
 ParticipantController는 ParticipantApi 추상 클래스를 상속한다. HTTP 메서드 계약과 Swagger 문서 어노테이션은 ParticipantApi에서 정의하고 Controller는 서비스 호출과 HTTP 응답을 처리한다. springdoc-openapi 3.1.1을 사용하며 `/swagger-ui.html`과 `/v3/api-docs`에서 확인한다. ParticipantApiTests는 실제 DB 저장·조회, 입력 검증, 삭제된 참여자 제외와 상위 클래스의 OpenAPI 문서 반영을 검증한다.
 
@@ -113,7 +117,7 @@ Spring Modulith core/JPA/runtime/test와 BOM을 제거했다. 사용하지 않�
 ## 남은 구현과 주의점
 
 1. PostgreSQL 운영 연결과 환경별 설정을 확정한다. 이후 스키마 변경은 후속 Flyway 마이그레이션으로 관리한다.
-2. 참여자 이름 수정·Soft Delete API를 추가한다. 등록·목록·상세 조회는 구현했다.
+2. 참여자 등록·목록·상세 조회·이름 수정·Soft Delete API는 구현했다. 프론트 화면과 연결한다.
 3. 게임 프로필 수정·수동 보정·Soft Delete 기능을 연결한다.
 4. 포지션 우선 편성 알고리즘과 비선호 배정 승인 검증을 구현한다.
 5. 확정 시 최신 정보 검증·스냅샷 저장·경기 결과·최근 내전 조회를 구현한다.

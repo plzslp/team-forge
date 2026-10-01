@@ -1,6 +1,11 @@
 package com.example.teamforge.participant.controller;
 
 import com.example.teamforge.participant.entity.Participant;
+import com.example.teamforge.participant.entity.Game;
+import com.example.teamforge.participant.entity.GameProfile;
+import com.example.teamforge.participant.entity.Position;
+import com.example.teamforge.match.entity.Match;
+import com.example.teamforge.match.entity.MatchParticipant;
 import com.example.teamforge.participant.repository.ParticipantRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
@@ -15,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.UUID;
+import java.util.Set;
+import java.util.stream.IntStream;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.*;
@@ -156,9 +163,178 @@ class ParticipantApiTests {
                 .andExpect(jsonPath("$.paths['/api/participants'].post.summary").value("참여자 등록"))
                 .andExpect(jsonPath("$.paths['/api/participants'].get.summary").value("참여자 목록 조회"))
                 .andExpect(jsonPath("$.paths['/api/participants/{id}'].get.summary").value("참여자 상세 조회"))
+                .andExpect(jsonPath("$.paths['/api/participants/{id}'].patch.summary").value("참여자 이름 수정"))
+                .andExpect(jsonPath("$.paths['/api/participants/{id}'].delete.summary").value("참여자 삭제"))
+                .andExpect(jsonPath("$.paths['/api/participants/{id}'].patch.requestBody.required").value(true))
+                .andExpect(jsonPath("$.paths['/api/participants/{id}'].delete.responses['204'].content").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/participants'].post.requestBody.required").value(true))
                 .andExpect(jsonPath("$.paths['/api/participants'].post.responses['201']").exists())
                 .andExpect(jsonPath("$.paths['/api/participants/{id}'].get.responses['404'].content['application/json'].schema['$ref']")
                         .value("#/components/schemas/ErrorResponse"));
+    }
+
+    @Test
+    void updatePersistsTrimmedNameAndIncrementsVersion() throws Exception {
+        // given: 기존 참여자와 버전을 준비한다.
+        Participant participant = Participant.register("기존 이름");
+        em.persist(participant);
+        em.flush();
+        UUID id = participant.getId();
+        long version = participant.getVersion();
+        em.clear();
+        String name = "가".repeat(20);
+
+        // when: 공백을 제거하면 20자인 이름으로 수정하고 DB에 반영한다.
+        mvc.perform(patch("/api/participants/" + id).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"  " + name + "  \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(id.toString()))
+                .andExpect(jsonPath("$.name").value(name));
+        em.flush();
+        em.clear();
+
+        // then: 재조회 시 새 이름과 증가한 버전을 확인한다.
+        Participant updated = repository.findById(id).orElseThrow();
+        assertEquals(name, updated.getName());
+        assertTrue(updated.getVersion() > version);
+        mvc.perform(get("/api/participants/" + id))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value(name));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "{\"name\":null}", "{\"name\":\"\"}", "{\"name\":\"   \"}",
+            "{\"name\":\"123456789012345678901\"}", "null", "{broken"})
+    void invalidUpdateReturns400WithoutChangingName(String body) throws Exception {
+        // given: 변경 대상 참여자와 잘못된 요청을 준비한다.
+        Participant participant = Participant.register("기존 이름");
+        em.persist(participant);
+        em.flush();
+        em.clear();
+
+        // when: 잘못된 이름 수정 요청을 전달한다.
+        mvc.perform(patch("/api/participants/" + participant.getId())
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        em.flush();
+        em.clear();
+
+        // then: 기존 이름이 유지된다.
+        assertEquals("기존 이름", repository.findById(participant.getId()).orElseThrow().getName());
+    }
+
+    @Test
+    void deletedParticipantCannotBeUpdated() throws Exception {
+        // given: 삭제된 참여자를 저장한다.
+        Participant participant = Participant.register("삭제됨").delete(Instant.EPOCH);
+        em.persist(participant);
+        em.flush();
+        em.clear();
+
+        // when / then: 수정 요청은 삭제된 참여자 오류를 반환한다.
+        mvc.perform(patch("/api/participants/" + participant.getId())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"새 이름\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PARTICIPANT_DELETED"));
+        em.clear();
+        assertEquals("삭제됨", repository.findById(participant.getId()).orElseThrow().getName());
+    }
+
+    @Test
+    void deleteRetainsRowAndExcludesParticipantFromPublicQueries() throws Exception {
+        // given: 활성 참여자를 저장한다.
+        Participant participant = Participant.register("참여자");
+        em.persist(participant);
+        em.flush();
+        UUID id = participant.getId();
+        long version = participant.getVersion();
+        em.clear();
+
+        // when: 삭제 API를 호출하고 DB에 반영한다.
+        mvc.perform(delete("/api/participants/" + id))
+                .andExpect(status().isNoContent()).andExpect(content().string(""));
+        em.flush();
+        em.clear();
+
+        // then: 행과 이름은 남고 삭제 시각과 버전이 변경되며 공개 조회에서는 제외된다.
+        Participant deleted = repository.findById(id).orElseThrow();
+        Instant deletedAt = deleted.getDeletedAt();
+        long deletedVersion = deleted.getVersion();
+        assertNotNull(deletedAt);
+        assertEquals("참여자", deleted.getName());
+        assertTrue(deletedVersion > version);
+        mvc.perform(get("/api/participants/" + id)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/participants")).andExpect(content().json("[]"));
+
+        // when: 같은 참여자를 다시 삭제한다.
+        mvc.perform(delete("/api/participants/" + id)).andExpect(status().isNoContent());
+        em.flush();
+        em.clear();
+
+        // then: 최초 삭제 시각과 버전이 유지된다.
+        deleted = repository.findById(id).orElseThrow();
+        assertEquals(deletedAt, deleted.getDeletedAt());
+        assertEquals(deletedVersion, deleted.getVersion());
+    }
+
+    @Test
+    void updateAndDeleteMissingParticipantReturn404() throws Exception {
+        // given: 존재하지 않는 ID를 준비한다.
+        String path = "/api/participants/" + UUID.randomUUID();
+        // when / then: 수정·삭제 모두 공통 404 오류를 반환한다.
+        mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"새 이름\"}"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+        mvc.perform(delete(path))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    void updateAndDeletePreserveProfileAndHistoricalSnapshot() throws Exception {
+        // given: 프로필과 확정 당시 이름이 저장된 경기 기록을 준비한다.
+        Participant participant = Participant.register("확정 당시 이름");
+        em.persist(participant);
+        GameProfile profile = new GameProfile(participant.getId(), Game.LOL, null, 1000, 1500,
+                Set.of(Position.LOL_TOP));
+        em.persist(profile);
+        var players = IntStream.range(0, 10).mapToObj(i -> {
+            Participant player = i == 0 ? participant : Participant.register("참여자" + i);
+            if (i != 0) em.persist(player);
+            return new MatchParticipant(player.getId(), player.getName(), 1500, Position.LOL_TOP,
+                    i < 5 ? MatchParticipant.Team.A : MatchParticipant.Team.B);
+        }).toList();
+        Match match = new Match(UUID.randomUUID(), Game.LOL, Instant.EPOCH, players, null);
+        em.persist(match);
+        em.flush();
+        em.clear();
+
+        // when: 이름 수정 후 Soft Delete를 수행한다.
+        String path = "/api/participants/" + participant.getId();
+        mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"새 이름\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(delete(path)).andExpect(status().isNoContent());
+        em.flush();
+        em.clear();
+
+        // then: 프로필과 경기 스냅샷의 이름·점수·포지션·팀은 보존된다.
+        assertEquals(1500, em.find(GameProfile.class, profile.getId()).effectiveScore());
+        var snapshots = em.find(Match.class, match.getId()).getParticipants();
+        assertEquals(10, snapshots.size());
+        var snapshot = snapshots.stream().filter(p -> p.getParticipantId().equals(participant.getId()))
+                .findFirst().orElseThrow();
+        assertEquals("확정 당시 이름", snapshot.getName());
+        assertEquals(1500, snapshot.getScore());
+        assertEquals(Position.LOL_TOP, snapshot.getAssignedPosition());
+        assertEquals(MatchParticipant.Team.A, snapshot.getTeam());
+    }
+
+    @Test
+    void updateAndDeleteMalformedIdReturn400() throws Exception {
+        // given: UUID 형식이 아닌 ID를 준비한다.
+        String path = "/api/participants/not-a-uuid";
+        // when / then: 수정·삭제 모두 공통 입력 오류를 반환한다.
+        mvc.perform(patch(path).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"새 이름\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        mvc.perform(delete(path))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 }
