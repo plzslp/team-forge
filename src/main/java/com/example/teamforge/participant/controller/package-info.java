@@ -1,2 +1,2 @@
-/** HTTP 요청 처리와 응답 변환. 실제 컨트롤러는 API 구현 시 추가한다. */
+/** HTTP 요청 처리와 응답 변환. Swagger 문서는 ParticipantApi에 정의한다. */
 package com.example.teamforge.participant.controller;

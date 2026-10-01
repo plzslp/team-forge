@@ -12,10 +12,10 @@
 com.example.teamforge
 ├── TeamForgeApplication
 ├── participant
-│   ├── controller              # 패키지 안내만 존재, 구현 예정
-│   ├── service                 # 패키지 안내만 존재, 구현 예정
-│   ├── repository              # 패키지 안내만 존재, 구현 예정
-│   ├── dto                    # 패키지 안내만 존재, 구현 예정
+│   ├── controller              # ParticipantApi / ParticipantController
+│   ├── service                 # ParticipantService
+│   ├── repository              # ParticipantRepository
+│   ├── dto                     # ParticipantCreateRequest / ParticipantResponse
 │   └── entity
 │       ├── Game                # LOL / OVERWATCH enum
 │       ├── Position            # 게임 정보를 포함한 포지션 enum
@@ -36,7 +36,21 @@ com.example.teamforge
     └── riot                   # 패키지 안내만 존재, 실제 연동 예정
 ```
 
-아직 REST API, 서비스, repository, Riot 통신, 실제 팀 편성 알고리즘은 없다. 빈 구현 클래스는 만들지 않고 `package-info.java`로 계층별 책임을 남긴다. 실제 기능은 이후 작업에서 추가한다.
+참여자 등록·목록·상세 조회는 controller → service → repository → DB로 연결했다. 게임 프로필 API, 참여자 수정·삭제 API, 내전 API, Riot 통신과 실제 팀 편성 알고리즘은 아직 없다. 미구현 계층의 책임은 `package-info.java`로 남긴다.
+
+### 참여자 API
+
+| 메서드 | 경로 | 동작 |
+|---|---|---|
+| POST | `/api/participants` | 이름으로 등록, 201과 상세 조회 Location 반환 |
+| GET | `/api/participants` | 활성 참여자 목록, 이름·ID 오름차순, 없으면 빈 배열 |
+| GET | `/api/participants/{id}` | 활성 참여자 상세 조회, 없거나 삭제됐으면 404 |
+
+등록 요청은 `{"name":"참여자"}`, 응답은 `{"id":"UUID","name":"참여자"}`다. 이름은 `strip()`으로 앞뒤 공백을 제거한 뒤 공백이 아닌 1~20자인지 검증한다. 요청 DTO는 Bean Validation, 엔티티는 기존 업무 검증을 사용한다. HTTP 입력 오류는 공통 400 / INVALID_REQUEST 응답을 반환한다.
+
+ParticipantService의 조회는 읽기 전용 트랜잭션, 등록은 쓰기 트랜잭션으로 실행한다. 공개 조회는 repository의 `deletedAt IS NULL` 조건을 사용하고 JPA 엔티티 대신 응답 DTO를 반환한다. 동명이인 등록은 허용한다. 목록 페이징과 게임 프로필 정보는 아직 제공하지 않는다.
+
+ParticipantController는 ParticipantApi 추상 클래스를 상속한다. HTTP 메서드 계약과 Swagger 문서 어노테이션은 ParticipantApi에서 정의하고 Controller는 서비스 호출과 HTTP 응답을 처리한다. springdoc-openapi 3.1.1을 사용하며 `/swagger-ui.html`과 `/v3/api-docs`에서 확인한다. ParticipantApiTests는 실제 DB 저장·조회, 입력 검증, 삭제된 참여자 제외와 상위 클래스의 OpenAPI 문서 반영을 검증한다.
 
 ## 계층별 책임
 
@@ -84,6 +98,7 @@ Spring Boot 4.1.1, Java 17과 기존 플러그인 버전은 유지한다. 라이
 | 의존성 | 용도·범위 |
 |---|---|
 | Web MVC starter | REST API 기반, implementation |
+| springdoc OpenAPI Web MVC UI | Swagger UI와 OpenAPI 문서, 3.1.1, implementation |
 | Data JPA starter | JPA Entity와 저장소 기반, implementation |
 | Flyway starter | 초기 스키마와 외래 키 마이그레이션 실행, implementation |
 | Flyway PostgreSQL 지원·PostgreSQL JDBC | 운영 DB 지원, runtimeOnly |
@@ -98,7 +113,7 @@ Spring Modulith core/JPA/runtime/test와 BOM을 제거했다. 사용하지 않�
 ## 남은 구현과 주의점
 
 1. PostgreSQL 운영 연결과 환경별 설정을 확정한다. 이후 스키마 변경은 후속 Flyway 마이그레이션으로 관리한다.
-2. 참여자 등록·조회 기능을 controller → service → repository → DB 순서로 연결한다.
+2. 참여자 이름 수정·Soft Delete API를 추가한다. 등록·목록·상세 조회는 구현했다.
 3. 게임 프로필 수정·수동 보정·Soft Delete 기능을 연결한다.
 4. 포지션 우선 편성 알고리즘과 비선호 배정 승인 검증을 구현한다.
 5. 확정 시 최신 정보 검증·스냅샷 저장·경기 결과·최근 내전 조회를 구현한다.
@@ -178,4 +193,4 @@ Java의 참여자 참조 필드는 UUID로 유지한다. DB FK는 JPA 객체 연
 
 내부 예외 메시지, SQL, 거절된 입력값과 스택 트레이스는 응답에 포함하지 않는다. 입력 오류의 필드별 상세 목록은 현재 제공하지 않는다. Spring MVC가 처리하는 예외는 ResponseEntityExceptionHandler를 통해 처리하며, 필터·서블릿 컨테이너 밖의 오류나 비동기 작업 오류까지 처리하는 구조는 아니다.
 
-아직 운영 Controller는 없으며 `GlobalExceptionHandlerTests`의 테스트 전용 컨트롤러와 MockMvc로 오류 응답을 검증한다. 엔티티 단위 테스트에서는 예외 타입과 ErrorCode를 함께 확인한다. API 구현 시 서비스에서 업무 예외를 그대로 전달하고, repository의 데이터 접근 예외는 공통 처리기로 전달한다.
+`GlobalExceptionHandlerTests`의 테스트 전용 컨트롤러와 MockMvc로 공통 오류 응답을 검증한다. 실제 참여자 API의 입력 오류·조회 실패는 ParticipantApiTests에서 검증한다. 엔티티 단위 테스트에서는 예외 타입과 ErrorCode를 함께 확인한다. 서비스의 업무 예외와 repository의 데이터 접근 예외는 공통 처리기로 전달한다.
