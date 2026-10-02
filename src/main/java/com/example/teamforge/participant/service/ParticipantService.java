@@ -3,13 +3,14 @@ package com.example.teamforge.participant.service;
 import com.example.teamforge.common.exception.BusinessException;
 import com.example.teamforge.common.exception.ErrorCode;
 import com.example.teamforge.participant.dto.ParticipantResponse;
+import com.example.teamforge.participant.dto.ParticipantPageResponse;
 import com.example.teamforge.participant.entity.Participant;
 import com.example.teamforge.participant.repository.ParticipantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -26,10 +27,14 @@ public class ParticipantService {
         return ParticipantResponse.from(participant);
     }
 
-    public List<ParticipantResponse> findAll() {
-        return participantRepository.findAllByDeletedAtIsNullOrderByNameAscIdAsc().stream()
-                .map(ParticipantResponse::from)
-                .toList();
+    public ParticipantPageResponse findAll(int page, int size) {
+        // JPA 조회 offset은 int 범위이므로 넘치는 요청을 DB 호출 전에 거절한다.
+        if (page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST);
+        }
+        return ParticipantPageResponse.from(participantRepository
+                .findAllByDeletedAtIsNullOrderByNameAscIdAsc(PageRequest.of(page, size))
+                .map(ParticipantResponse::from));
     }
 
     public ParticipantResponse findById(UUID id) {

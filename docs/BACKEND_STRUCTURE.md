@@ -15,7 +15,7 @@ com.example.teamforge
 │   ├── controller              # ParticipantApi / ParticipantController
 │   ├── service                 # ParticipantService
 │   ├── repository              # ParticipantRepository
-│   ├── dto                     # ParticipantCreateRequest / ParticipantUpdateRequest / ParticipantResponse
+│   ├── dto                     # 등록·수정 요청 / ParticipantResponse / ParticipantPageResponse
 │   └── entity
 │       ├── Game                # LOL / OVERWATCH enum
 │       ├── Position            # 게임 정보를 포함한 포지션 enum
@@ -43,7 +43,7 @@ com.example.teamforge
 | 메서드 | 경로 | 동작 |
 |---|---|---|
 | POST | `/api/participants` | 이름으로 등록, 201과 상세 조회 Location 반환 |
-| GET | `/api/participants` | 활성 참여자 목록, 이름·ID 오름차순, 없으면 빈 배열 |
+| GET | `/api/participants?page=0&size=20` | 활성 참여자 페이징 조회, 이름·ID 오름차순 고정 |
 | GET | `/api/participants/{id}` | 활성 참여자 상세 조회, 없거나 삭제됐으면 404 |
 | PATCH | `/api/participants/{id}` | 이름 수정, 수정된 ID·이름 반환. 없으면 404, 삭제됐으면 409 |
 | DELETE | `/api/participants/{id}` | Soft Delete, 204 반환. 반복 삭제도 204, 없으면 404 |
@@ -52,9 +52,23 @@ com.example.teamforge
 
 수정 요청도 `{"name":"새 이름"}` 형태이며 등록과 동일한 이름 검증을 적용한다. 삭제는 `deletedAt`만 설정하며 참여자 행·게임 프로필·기존 경기 스냅샷을 유지한다. 반복 삭제 시 최초 삭제 시각을 유지한다.
 
-ParticipantService의 조회는 읽기 전용 트랜잭션, 등록·수정·삭제는 쓰기 트랜잭션으로 실행한다. 수정·삭제는 관리 상태의 엔티티를 변경하고 JPA 변경 감지로 저장한다. 공개 조회는 repository의 `deletedAt IS NULL` 조건을 사용하고 JPA 엔티티 대신 응답 DTO를 반환한다. 동명이인 등록은 허용한다. 목록 페이징과 게임 프로필 정보는 아직 제공하지 않는다.
+ParticipantService의 조회는 읽기 전용 트랜잭션, 등록·수정·삭제는 쓰기 트랜잭션으로 실행한다. 수정·삭제는 관리 상태의 엔티티를 변경하고 JPA 변경 감지로 저장한다. 공개 조회는 repository의 `deletedAt IS NULL` 조건을 사용하고 JPA 엔티티 대신 응답 DTO를 반환한다. 동명이인 등록은 허용한다. 게임 프로필 정보는 아직 제공하지 않는다.
 
-ParticipantController는 ParticipantApi 추상 클래스를 상속한다. HTTP 메서드 계약과 Swagger 문서 어노테이션은 ParticipantApi에서 정의하고 Controller는 서비스 호출과 HTTP 응답을 처리한다. springdoc-openapi 3.1.1을 사용하며 `/swagger-ui.html`과 `/v3/api-docs`에서 확인한다. ParticipantApiTests는 실제 DB 저장·조회, 입력 검증, 삭제된 참여자 제외와 상위 클래스의 OpenAPI 문서 반영을 검증한다.
+목록은 Spring Data JPA의 PageRequest와 Page를 사용하되 외부 응답은 ParticipantPageResponse로 고정한다. ParticipantPageRequest를 `@ModelAttribute`로 바인딩하고 `@Valid`로 입력을 검증한다. page는 0부터 시작하며 기본값 0, size는 기본값 20과 허용 범위 1~100을 사용한다. 기본값은 파라미터를 생략한 경우에만 적용하며, `page=`·`size=` 또는 공백만 있는 값은 거절한다. 음수 page, 범위 밖 size, 숫자가 아닌 입력, int 범위를 넘는 조회 offset(page × size)은 400 / INVALID_REQUEST를 반환한다. Service는 조회 offset을 포함한 범위 검증을 유지한다. sort 파라미터는 지원하지 않으며 전달해도 이름·ID 오름차순을 유지한다.
+
+```json
+{
+  "content": [{"id": "UUID", "name": "참여자"}],
+  "page": 0,
+  "size": 20,
+  "totalElements": 1,
+  "totalPages": 1
+}
+```
+
+참여자가 없거나 마지막 페이지 이후를 요청하면 content는 빈 배열이다. totalElements와 totalPages에는 삭제되지 않은 참여자 전체 기준의 값을 반환한다. 기존 배열 응답에서 페이지 객체로 바뀌었으므로 프론트 연결 시 content를 읽고 페이지 간 선택된 참여자를 유지해야 한다. 게임·검색·포지션 필터와 화면 페이지 이동은 후속 작업이다.
+
+ParticipantController는 ParticipantApi 추상 클래스를 상속한다. ParticipantApi는 메서드 선언과 Swagger 문서 어노테이션(`@Tag`, `@Operation`, `@ApiResponses`, `@ParameterObject`)을 정의한다. Controller는 HTTP 매핑(`@RequestMapping`, `@GetMapping`, `@PostMapping`, `@PatchMapping`, `@DeleteMapping`), 요청 바인딩(`@PathVariable`, `@RequestBody`, `@ModelAttribute`), 검증 실행(`@Valid`), 서비스 호출과 HTTP 응답을 담당한다. DTO는 Bean Validation 제약과 필드의 Swagger 스키마를 정의한다. 같은 매핑·바인딩·검증 어노테이션을 Api와 Controller에 중복 작성하지 않는다. springdoc-openapi 3.1.1을 사용하며 `/swagger-ui.html`과 `/v3/api-docs`에서 확인한다. ParticipantApiTests는 실제 DB 저장·조회, 입력 검증, 삭제된 참여자 제외와 상위 클래스의 OpenAPI 문서 반영을 검증한다.
 
 ## 계층별 책임
 
