@@ -2,6 +2,7 @@
 # https://docs.coderabbit.ai/reference/configuration
 language: ko-KR
 tone_instructions: >-
+  리뷰 본문, 위험 평가, 보안·아키텍처 설명과 대화 응답은 한국어로 작성하세요.
   문제점과 한계를 구체적으로 짚고, 영향과 근거를 명확히 설명하세요.
   필요한 대안은 장단점과 함께 제시하고 개선 방향과 학습에 도움이 되는 코멘트를 작성하세요.
   지나치게 딱딱하지 않게 논리적으로 설명하며 코드 식별자, 파일 경로와 API 이름은 원문을 유지하세요.
@@ -9,6 +10,9 @@ tone_instructions: >-
 reviews:
   profile: assertive
   request_changes_workflow: false
+  pre_merge_checks:
+    docstrings:
+      mode: off
   high_level_summary: true
   high_level_summary_in_walkthrough: false
   high_level_summary_instructions: |

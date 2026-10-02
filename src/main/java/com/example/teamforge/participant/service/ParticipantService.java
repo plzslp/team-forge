@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -35,5 +36,22 @@ public class ParticipantService {
         Participant participant = participantRepository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         return ParticipantResponse.from(participant);
+    }
+
+    @Transactional
+    public ParticipantResponse update(UUID id, String name) {
+        Participant participant = findParticipant(id);
+        participant.rename(name);
+        return ParticipantResponse.from(participant);
+    }
+
+    @Transactional
+    public void delete(UUID id) {
+        findParticipant(id).delete(Instant.now());
+    }
+
+    private Participant findParticipant(UUID id) {
+        return participantRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
     }
 }
