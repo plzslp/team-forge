@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.stream.IntStream;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.hasItem;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -203,11 +204,18 @@ class ParticipantApiTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(21)))
                 .andExpect(jsonPath("$.size").value(100));
+        // when / then: size만 생략해도 기본 크기 20을 유지한다.
+        mvc.perform(get("/api/participants").param("page", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.size").value(20));
     }
 
     @ParameterizedTest
     @CsvSource({"-1,20", "0,0", "0,-1", "0,101", "abc,20", "0,abc",
-            "2147483648,20", "0,2147483648", "2147483647,100"})
+            "2147483648,20", "0,2147483648", "2147483647,100",
+            "'',20", "0,''", "'',''", "' ',20", "0,' '"})
     void invalidPaginationReturns400(String page, String size) throws Exception {
         // given: 범위 또는 형식이 잘못된 페이지 조건을 준비한다.
         // when / then: 공통 입력 오류 응답을 반환한다.
@@ -258,6 +266,14 @@ class ParticipantApiTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['/api/participants'].post.summary").value("참여자 등록"))
                 .andExpect(jsonPath("$.paths['/api/participants'].get.summary").value("참여자 목록 조회"))
+                .andExpect(jsonPath("$.paths['/api/participants'].get.parameters[?(@.name == 'page')].schema.type")
+                        .value(hasItem("integer")))
+                .andExpect(jsonPath("$.paths['/api/participants'].get.parameters[?(@.name == 'page')].schema.default")
+                        .value(hasItem(0)))
+                .andExpect(jsonPath("$.paths['/api/participants'].get.parameters[?(@.name == 'size')].schema.type")
+                        .value(hasItem("integer")))
+                .andExpect(jsonPath("$.paths['/api/participants'].get.parameters[?(@.name == 'size')].schema.default")
+                        .value(hasItem(20)))
                 .andExpect(jsonPath("$.paths['/api/participants/{id}'].get.summary").value("참여자 상세 조회"))
                 .andExpect(jsonPath("$.paths['/api/participants/{id}'].patch.summary").value("참여자 이름 수정"))
                 .andExpect(jsonPath("$.paths['/api/participants/{id}'].delete.summary").value("참여자 삭제"))
