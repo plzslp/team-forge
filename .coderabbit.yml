@@ -98,4 +98,5 @@ knowledge_base:
   code_guidelines:
     enabled: true
     filePatterns:
-      - "docs/BACKEND_STRUCTURE.md"
+      - files: "docs/BACKEND_STRUCTURE.md"
+        applyTo: "src/main/java/**"
