@@ -11,6 +11,7 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -106,18 +107,113 @@ class ParticipantApiTests {
         // when / then: 삭제된 참여자를 제외하고 이름순으로 조회한다.
         mvc.perform(get("/api/participants"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(2)))
-                .andExpect(jsonPath("$[0].name").value("Amy"))
-                .andExpect(jsonPath("$[1].name").value("Zed"));
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.content[0].name").value("Amy"))
+                .andExpect(jsonPath("$.content[1].name").value("Zed"))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalPages").value(1));
     }
 
     @Test
-    void emptyListReturnsEmptyArray() throws Exception {
+    void emptyListReturnsEmptyContentAndPageMetadata() throws Exception {
         // given: 참여자를 등록하지 않는다.
         // when / then: 빈 배열을 반환한다.
         mvc.perform(get("/api/participants"))
                 .andExpect(status().isOk())
-                .andExpect(content().json("[]"));
+                .andExpect(jsonPath("$.content", hasSize(0)))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.totalPages").value(0));
+    }
+
+    @Test
+    void paginationReturnsOrderedPagesAndRetainsTotalsBeyondLastPage() throws Exception {
+        // given: 순서가 다른 활성 참여자 3명과 삭제된 참여자 1명을 저장한다.
+        em.persist(Participant.register("Zed"));
+        em.persist(Participant.register("Aaron").delete(Instant.EPOCH));
+        em.persist(Participant.register("Amy"));
+        em.persist(Participant.register("Ben"));
+        em.flush();
+        em.clear();
+
+        // when / then: 첫 페이지에 정렬된 2명과 활성 참여자 전체 개수를 반환한다.
+        mvc.perform(get("/api/participants").param("page", "0").param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.content[0].name").value("Amy"))
+                .andExpect(jsonPath("$.content[1].name").value("Ben"))
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.totalPages").value(2));
+        // when / then: 마지막 페이지에 남은 참여자 1명을 반환한다.
+        mvc.perform(get("/api/participants").param("page", "1").param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].name").value("Zed"))
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.size").value(2))
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.totalPages").value(2));
+        // when / then: 마지막 페이지 이후에도 전체 개수를 보존한다.
+        mvc.perform(get("/api/participants").param("page", "2").param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(0)))
+                .andExpect(jsonPath("$.page").value(2))
+                .andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.totalPages").value(2));
+    }
+
+    @Test
+    void sameNamesHaveStableIdOrderEvenWithSortParameter() throws Exception {
+        // given: 동일한 이름을 가진 참여자를 저장하고 DB의 ID 오름차순을 확인한다.
+        em.persist(Participant.register("동명이인"));
+        em.persist(Participant.register("동명이인"));
+        em.flush();
+        em.clear();
+        var ids = em.createQuery("select p.id from Participant p order by p.id asc", UUID.class)
+                .getResultList();
+
+        // when / then: sort 파라미터는 정렬을 바꾸지 않으며 두 페이지가 ID 순서로 연결된다.
+        for (int page = 0; page < 2; page++) {
+            mvc.perform(get("/api/participants").param("page", String.valueOf(page))
+                            .param("size", "1").param("sort", "id,desc"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content[0].id").value(ids.get(page).toString()))
+                    .andExpect(jsonPath("$.totalElements").value(2));
+        }
+    }
+
+    @Test
+    void defaultPageLimitsResultsAndMaximumSizeIsAccepted() throws Exception {
+        // given: 기본 페이지 크기보다 많은 활성 참여자를 저장한다.
+        IntStream.range(0, 21).forEach(i -> em.persist(Participant.register("참여자" + i)));
+        em.flush();
+        em.clear();
+
+        // when / then: 기본 요청은 20명만 반환하며 다음 페이지가 존재한다.
+        mvc.perform(get("/api/participants"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(20)))
+                .andExpect(jsonPath("$.totalElements").value(21))
+                .andExpect(jsonPath("$.totalPages").value(2));
+        // when / then: 최대 크기 100은 정상 요청이다.
+        mvc.perform(get("/api/participants").param("size", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(21)))
+                .andExpect(jsonPath("$.size").value(100));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"-1,20", "0,0", "0,-1", "0,101", "abc,20", "0,abc",
+            "2147483648,20", "0,2147483648", "2147483647,100"})
+    void invalidPaginationReturns400(String page, String size) throws Exception {
+        // given: 범위 또는 형식이 잘못된 페이지 조건을 준비한다.
+        // when / then: 공통 입력 오류 응답을 반환한다.
+        mvc.perform(get("/api/participants").param("page", page).param("size", size))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 
     @Test
@@ -264,7 +360,9 @@ class ParticipantApiTests {
         assertEquals("참여자", deleted.getName());
         assertTrue(deletedVersion > version);
         mvc.perform(get("/api/participants/" + id)).andExpect(status().isNotFound());
-        mvc.perform(get("/api/participants")).andExpect(content().json("[]"));
+        mvc.perform(get("/api/participants"))
+                .andExpect(jsonPath("$.content", hasSize(0)))
+                .andExpect(jsonPath("$.totalElements").value(0));
 
         // when: 같은 참여자를 다시 삭제한다.
         mvc.perform(delete("/api/participants/" + id)).andExpect(status().isNoContent());

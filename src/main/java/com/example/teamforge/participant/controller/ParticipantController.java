@@ -3,6 +3,7 @@ package com.example.teamforge.participant.controller;
 import com.example.teamforge.participant.service.ParticipantService;
 import com.example.teamforge.participant.dto.ParticipantCreateRequest;
 import com.example.teamforge.participant.dto.ParticipantResponse;
+import com.example.teamforge.participant.dto.ParticipantPageResponse;
 import com.example.teamforge.participant.dto.ParticipantUpdateRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -10,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -27,8 +27,8 @@ public class ParticipantController extends ParticipantApi {
     }
 
     @Override
-    public ResponseEntity<List<ParticipantResponse>> findAll() {
-        return ResponseEntity.ok(participantService.findAll());
+    public ResponseEntity<ParticipantPageResponse> findAll(int page, int size) {
+        return ResponseEntity.ok(participantService.findAll(page, size));
     }
 
     @Override

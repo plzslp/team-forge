@@ -41,6 +41,7 @@ npm.cmd run dev -- --port 5173 --strictPort
 
 프론트 화면은 별도로 실행합니다. 백엔드 루트 주소에서는 화면이 표시되지 않습니다.
 참여자 등록·목록·상세 조회·이름 수정·Soft Delete API를 제공하며, 프론트 데모와는 아직 연결하지 않았습니다.
+목록 조회는 `/api/participants?page=0&size=20`으로 요청하며, `content`와 페이지 정보를 반환합니다. 페이지 번호는 0부터, 크기는 1~100이며 이름·ID 오름차순으로 정렬합니다.
 API 문서는 [Swagger UI](http://127.0.0.1:8080/swagger-ui.html)에서 확인할 수 있습니다.
 
 실행 종료는 해당 터미널에서 `Ctrl+C`를 누릅니다.

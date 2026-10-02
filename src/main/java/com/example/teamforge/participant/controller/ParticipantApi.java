@@ -3,6 +3,7 @@ package com.example.teamforge.participant.controller;
 import com.example.teamforge.common.exception.ErrorResponse;
 import com.example.teamforge.participant.dto.ParticipantCreateRequest;
 import com.example.teamforge.participant.dto.ParticipantResponse;
+import com.example.teamforge.participant.dto.ParticipantPageResponse;
 import com.example.teamforge.participant.dto.ParticipantUpdateRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -11,6 +12,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,8 +22,8 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 
-import java.util.List;
 import java.util.UUID;
 
 /** 참여자 API 계약과 Swagger 문서용 어노테이션을 정의한다. */
@@ -37,10 +40,19 @@ public abstract class ParticipantApi {
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public abstract ResponseEntity<ParticipantResponse> register(@Valid @RequestBody ParticipantCreateRequest request);
 
-    @Operation(summary = "참여자 목록 조회", description = "삭제되지 않은 참여자를 이름, ID 오름차순으로 조회합니다.")
-    @ApiResponse(responseCode = "200", description = "조회 완료. 참여자가 없으면 빈 배열을 반환합니다.")
+    @Operation(summary = "참여자 목록 조회", description = "삭제되지 않은 참여자를 이름, ID 오름차순으로 페이징 조회합니다. "
+            + "page는 0부터 시작하고 기본값은 0, size는 1~100이며 기본값은 20입니다. "
+            + "마지막 페이지를 넘으면 content는 빈 배열이며, page × size가 int 범위를 넘으면 400을 반환합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 완료. 목록과 페이지 정보를 반환합니다."),
+            @ApiResponse(responseCode = "400", description = "잘못된 페이지 번호 또는 크기",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ErrorResponse.class)))
+    })
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    public abstract ResponseEntity<List<ParticipantResponse>> findAll();
+    public abstract ResponseEntity<ParticipantPageResponse> findAll(
+            @RequestParam(name = "page", defaultValue = "0") @Min(0) int page,
+            @RequestParam(name = "size", defaultValue = "20") @Min(1) @Max(100) int size);
 
     @Operation(summary = "참여자 상세 조회", description = "삭제되지 않은 참여자의 ID와 이름을 조회합니다.")
     @ApiResponses({
