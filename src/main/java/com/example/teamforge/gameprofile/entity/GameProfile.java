@@ -1,4 +1,4 @@
-package com.example.teamforge.participant.entity;
+package com.example.teamforge.gameprofile.entity;
 
 import com.example.teamforge.common.exception.BusinessException;
 import com.example.teamforge.common.exception.ErrorCode;
@@ -70,6 +70,13 @@ public class GameProfile {
 
     public int effectiveScore() {
         return manualScore != null ? manualScore : baseScore;
+    }
+
+    /** 수동 편집 항목만 교체하고 외부 조회로 얻은 환산 점수는 보존한다. */
+    public void update(String accountId, Integer manualScore, Set<Position> preferredPositions) {
+        changePreferredPositions(preferredPositions);
+        overrideScore(manualScore);
+        this.accountId = accountId;
     }
 
     public GameProfile overrideScore(Integer score) {

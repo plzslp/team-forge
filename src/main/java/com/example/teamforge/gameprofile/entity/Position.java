@@ -1,4 +1,4 @@
-package com.example.teamforge.participant.entity;
+package com.example.teamforge.gameprofile.entity;
 
 /** 게임별 포지션. enum 이름을 DB에 문자열로 저장한다. */
 public enum Position {

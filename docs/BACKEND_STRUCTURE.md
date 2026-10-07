@@ -2,7 +2,7 @@
 
 ## 아키텍처 결정
 
-2026-09-19 기준, 단일 Gradle 프로젝트 안에서 **업무별 패키지 + 레이어드 아키텍처**를 사용한다. `participant`, `match`는 업무를 구분하는 일반 패키지이며 각 내부에 `controller`, `service`, `repository`, `entity`, `dto`를 둔다.
+단일 Gradle 프로젝트 안에서 **업무별 패키지 + 레이어드 아키텍처**를 사용한다. `participant`, `gameprofile`, `match`는 업무를 구분하는 일반 패키지이며 각 내부에 `controller`, `service`, `repository`, `entity`, `dto`를 둔다. 2026-10-08에 게임 프로필 기능을 `participant`에서 `gameprofile`로 분리했다.
 
 엄격한 DDD 모듈 경계와 Spring Modulith는 사용하지 않는다. 사용처·구현체가 없던 `ParticipantLookup`, `ParticipantSnapshot`과 Modulith 전용 경계 테스트를 제거했다. JPA 모델에 구현된 점수 보정, Soft Delete, 경기 기록 검증은 유지한다.
 
@@ -15,11 +15,16 @@ com.example.teamforge
 │   ├── controller              # ParticipantApi / ParticipantController
 │   ├── service                 # ParticipantService
 │   ├── repository              # ParticipantRepository
-│   ├── dto                     # 등록·수정 요청 / ParticipantResponse / ParticipantPageResponse
+│   ├── dto                     # 참여자·페이징 요청과 응답
+│   └── entity                  # Participant
+├── gameprofile
+│   ├── controller              # GameProfileApi / GameProfileController
+│   ├── service                 # GameProfileService
+│   ├── repository              # GameProfileRepository
+│   ├── dto                     # GameProfileRequest / GameProfileResponse
 │   └── entity
 │       ├── Game                # LOL / OVERWATCH enum
 │       ├── Position            # 게임 정보를 포함한 포지션 enum
-│       ├── Participant
 │       └── GameProfile
 ├── match
 │   ├── controller              # 패키지 안내만 존재, 구현 예정
@@ -36,7 +41,7 @@ com.example.teamforge
     └── riot                   # 패키지 안내만 존재, 실제 연동 예정
 ```
 
-참여자 등록·목록·상세 조회·이름 수정·Soft Delete는 controller → service → repository → DB로 연결했다. 게임 프로필 API, 내전 API, Riot 통신과 실제 팀 편성 알고리즘은 아직 없다. 미구현 계층의 책임은 `package-info.java`로 남긴다.
+참여자 등록·목록·상세 조회·이름 수정·Soft Delete와 게임 프로필 등록·전체 수정·조회는 controller → service → repository → DB로 연결했다. 내전 API, Riot 통신과 실제 팀 편성 알고리즘은 아직 없다. 미구현 계층의 책임은 `package-info.java`로 남긴다.
 
 ### 참여자 API
 
@@ -52,7 +57,7 @@ com.example.teamforge
 
 수정 요청도 `{"name":"새 이름"}` 형태이며 등록과 동일한 이름 검증을 적용한다. 삭제는 `deletedAt`만 설정하며 참여자 행·게임 프로필·기존 경기 스냅샷을 유지한다. 반복 삭제 시 최초 삭제 시각을 유지한다.
 
-ParticipantService의 조회는 읽기 전용 트랜잭션, 등록·수정·삭제는 쓰기 트랜잭션으로 실행한다. 수정·삭제는 관리 상태의 엔티티를 변경하고 JPA 변경 감지로 저장한다. 공개 조회는 repository의 `deletedAt IS NULL` 조건을 사용하고 JPA 엔티티 대신 응답 DTO를 반환한다. 동명이인 등록은 허용한다. 게임 프로필 정보는 아직 제공하지 않는다.
+ParticipantService의 조회는 읽기 전용 트랜잭션, 등록·수정·삭제는 쓰기 트랜잭션으로 실행한다. 수정·삭제는 관리 상태의 엔티티를 변경하고 JPA 변경 감지로 저장한다. 공개 조회는 repository의 `deletedAt IS NULL` 조건을 사용하고 JPA 엔티티 대신 응답 DTO를 반환한다. 동명이인 등록은 허용한다. 참여자 API 응답에는 게임 프로필을 포함하지 않으며 별도 프로필 API로 조회한다.
 
 목록은 Spring Data JPA의 PageRequest와 Page를 사용하되 외부 응답은 ParticipantPageResponse로 고정한다. ParticipantPageRequest를 `@ModelAttribute`로 바인딩하고 `@Valid`로 입력을 검증한다. page는 0부터 시작하며 기본값 0, size는 기본값 20과 허용 범위 1~100을 사용한다. 기본값은 파라미터를 생략한 경우에만 적용하며, `page=`·`size=` 또는 공백만 있는 값은 거절한다. 음수 page, 범위 밖 size, 숫자가 아닌 입력, int 범위를 넘는 조회 offset(page × size)은 400 / INVALID_REQUEST를 반환한다. Service는 조회 offset을 포함한 범위 검증을 유지한다. sort 파라미터는 지원하지 않으며 전달해도 이름·ID 오름차순을 유지한다.
 
@@ -70,6 +75,21 @@ ParticipantService의 조회는 읽기 전용 트랜잭션, 등록·수정·삭�
 
 ParticipantController는 ParticipantApi 추상 클래스를 상속한다. ParticipantApi는 메서드 선언과 Swagger 문서 어노테이션(`@Tag`, `@Operation`, `@ApiResponses`, `@ParameterObject`)을 정의한다. Controller는 HTTP 매핑(`@RequestMapping`, `@GetMapping`, `@PostMapping`, `@PatchMapping`, `@DeleteMapping`), 요청 바인딩(`@PathVariable`, `@RequestBody`, `@ModelAttribute`), 검증 실행(`@Valid`), 서비스 호출과 HTTP 응답을 담당한다. DTO는 Bean Validation 제약과 필드의 Swagger 스키마를 정의한다. 같은 매핑·바인딩·검증 어노테이션을 Api와 Controller에 중복 작성하지 않는다. springdoc-openapi 3.1.1을 사용하며 `/swagger-ui.html`과 `/v3/api-docs`에서 확인한다. ParticipantApiTests는 실제 DB 저장·조회, 입력 검증, 삭제된 참여자 제외와 상위 클래스의 OpenAPI 문서 반영을 검증한다.
 
+### 게임 프로필 API
+
+| 메서드 | 경로 | 동작 |
+| --- | --- | --- |
+| PUT | `/api/participants/{participantId}/profiles/{game}` | 신규 등록 201 + Location, 기존 프로필 전체 수정 200 |
+| GET | `/api/participants/{participantId}/profiles/{game}` | 활성 참여자의 해당 게임 프로필 조회 200 |
+
+game은 `LOL` 또는 `OVERWATCH`다. 입력 예시는 `{"accountId":"계정#태그","manualScore":1500,"preferredPositions":["LOL_TOP","LOL_MID"]}`다. 계정은 앞뒤 공백 제거 후 255자 이하이며 빈 값·null·생략은 연결 해제로 처리한다. 수동 점수는 음이 아닌 정수 또는 null이며 null·생략은 보정 해제다. 선호 포지션은 해당 게임의 enum 값으로 하나 이상 전달해야 하며 null 원소는 허용하지 않는다. PUT은 수동 편집 항목 전체를 교체하므로 생략된 계정·수동 점수는 유지하지 않는다.
+
+응답은 id, participantId, game, accountId, baseScore, manualScore, effectiveScore, preferredPositions를 포함한다. 최초 환산 점수(baseScore)는 0이며 기존 프로필 수정에서는 보존한다. 수동 점수가 있으면 실제 적용 점수(effectiveScore)로 사용하며 0점 지정도 유효하다. 보정을 해제하면 기존 환산 점수를 적용한다. Riot 조회·계정 검증·티어 환산은 아직 구현하지 않았다.
+
+GameProfileRepository는 참여자·게임으로 프로필을 찾고 기존 DB 유일 제약으로 조합별 하나를 보장한다. GameProfileService의 조회는 읽기 전용, 등록·수정은 쓰기 트랜잭션을 사용한다. 기존 프로필은 관리 상태에서 변경하며 `@Version`으로 동시 변경 충돌을 감지한다. 동시 신규 등록의 유일 제약 충돌은 공통 409로 처리한다. 참여자·프로필이 없거나 삭제된 참여자의 조회는 404, 삭제된 참여자의 등록·수정은 409다. 입력 형식·범위 오류는 400 / INVALID_REQUEST, 다른 게임의 포지션은 400 / INVALID_PREFERRED_POSITION이다. 기존 참여자 목록·상세 응답은 변경하지 않으며 V1 마이그레이션도 수정하지 않는다.
+
+GameProfileController는 GameProfileApi를 상속하며 아래와 같은 문서·HTTP 처리 책임 분리를 적용한다. GameProfileApiTests는 두 게임의 등록과 조회, 기존 환산 점수 보존, 보정 해제·0점, 반복 PUT, 입력 오류, 삭제된 참여자 제한과 Swagger 계약을 실제 DB·MockMvc로 검증한다.
+
 ## 계층별 책임
 
 | 계층 | 책임 |
@@ -82,13 +102,13 @@ ParticipantController는 ParticipantApi 추상 클래스를 상속한다. Partic
 
 기본 흐름은 `controller → service → repository`다. Entity는 controller나 service를 참조하지 않는다. 다른 업무의 기능이 필요하면 해당 service를 호출하는 방식으로 시작하고 순환 호출은 피한다. 이를 위해 별도의 조회 인터페이스나 변환 계층을 의무적으로 만들지는 않는다.
 
-`Game`은 참여자 게임 프로필에서 정의하며 match에서도 같은 enum을 사용한다. `TeamPreview`는 현재 내부 처리 결과이며 `MatchParticipant` 목록을 담는다. 향후 HTTP API에서는 필요한 필드만 담은 응답 DTO를 정의하고 JPA Entity를 그대로 직렬화하지 않는다.
+`participant`는 참여자 이름·등록·Soft Delete를, `gameprofile`은 게임 계정·점수·선호 포지션을 담당한다. GameProfileService는 참여자의 존재·활성 여부를 확인하기 위해 ParticipantRepository를 참조한다. 이 검증과 프로필 저장은 같은 트랜잭션에서 처리한다. `Game`과 `Position`은 `gameprofile.entity`에서 정의하며 match에서도 같은 enum을 사용한다. 패키지 분리는 API 경로와 DB 테이블·컬럼·enum 저장값을 변경하지 않는다. `TeamPreview`는 현재 내부 처리 결과이며 `MatchParticipant` 목록을 담는다. 향후 HTTP API에서는 필요한 필드만 담은 응답 DTO를 정의하고 JPA Entity를 그대로 직렬화하지 않는다.
 
 `Match.validateTeams(game, participants)`는 미리보기와 확정 기록이 공유하는 인원·중복·5:5·게임과 배정 포지션 일치 검증이다. 실제 포지션 배정과 점수 차이 최소화 알고리즘은 이후 `match.service` 아래 별도 계산 클래스로 구현해 HTTP·DB 없이 테스트한다.
 
 ## 외부 API 분리
 
-Riot 연동은 `external.riot` 패키지에 클라이언트, 외부 요청·응답 DTO, 통신 오류 처리를 모은다. 참여자 service가 클라이언트를 호출하고 결과를 내부 모델에 반영한다. API 키는 환경 변수 등 외부 설정에서 주입한다.
+Riot 연동은 `external.riot` 패키지에 클라이언트, 외부 요청·응답 DTO, 통신 오류 처리를 모은다. 게임 프로필 service가 클라이언트를 호출하고 결과를 내부 모델에 반영한다. API 키는 환경 변수 등 외부 설정에서 주입한다.
 
 현재는 패키지 수준 분리이며 별도 Gradle 모듈이나 HTTP 클라이언트 의존성을 추가하지 않았다. 실제 연동 구현 시 필요한 통신 의존성을 선택한다.
 
@@ -132,7 +152,7 @@ Spring Modulith core/JPA/runtime/test와 BOM을 제거했다. 사용하지 않�
 
 1. PostgreSQL 운영 연결과 환경별 설정을 확정한다. 이후 스키마 변경은 후속 Flyway 마이그레이션으로 관리한다.
 2. 참여자 등록·목록·상세 조회·이름 수정·Soft Delete API는 구현했다. 프론트 화면과 연결한다.
-3. 게임 프로필 수정·수동 보정·Soft Delete 기능을 연결한다.
+3. 참여자·게임 프로필 API를 프론트와 연결하고 게임·이름·포지션 필터를 추가한다.
 4. 포지션 우선 편성 알고리즘과 비선호 배정 승인 검증을 구현한다.
 5. 확정 시 최신 정보 검증·스냅샷 저장·경기 결과·최근 내전 조회를 구현한다.
 6. Riot API를 실제로 연동한다.
@@ -149,13 +169,15 @@ Match/TeamPreview는 인원·중복·5:5와 배정 포지션이 해당 게임에
 gradlew.bat test bootJar
 ```
 
-ParticipantEntityTests·MatchEntityTests로 기존 모델 규칙, JpaModelTests로 H2 저장·변경 감지·스냅샷 저장, TeamForgeApplicationTests로 컨텍스트 구성을 검증한다. Modulith 전용 경계 테스트는 새 구조에서 제거했다.
+ParticipantEntityTests·GameProfileEntityTests·MatchEntityTests로 각 모델 규칙, JpaModelTests로 H2 저장·변경 감지·스냅샷 저장, TeamForgeApplicationTests로 컨텍스트 구성을 검증한다. 프로필 테스트는 `gameprofile` 아래, 참여자 테스트는 `participant` 아래 둔다. Modulith 전용 경계 테스트는 새 구조에서 제거했다.
+
+Java 지역 변수는 테스트를 포함해 명시적 타입으로 선언하며 `var`를 사용하지 않는다.
 
 테스트 작성 시 `// given`, `// when`, `// then` 주석으로 준비·실행·검증을 구분한다. 예외 검증처럼 실행과 검증이 함께 이루어지는 경우 `// when / then`을 사용한다. 여러 상태 변경을 검증하는 테스트는 각 단계의 when/then을 반복해 표시한다.
 
 ## 포지션 타입
 
-`participant.entity.Position`은 게임 정보를 가진 단일 enum이다. 롤은 `LOL_TOP`, `LOL_JUNGLE`, `LOL_MID`, `LOL_BOTTOM`, `LOL_SUPPORT`, 오버워치는 `OVERWATCH_TANK`, `OVERWATCH_DAMAGE`, `OVERWATCH_SUPPORT`를 사용한다.
+`gameprofile.entity.Position`은 게임 정보를 가진 단일 enum이다. 롤은 `LOL_TOP`, `LOL_JUNGLE`, `LOL_MID`, `LOL_BOTTOM`, `LOL_SUPPORT`, 오버워치는 `OVERWATCH_TANK`, `OVERWATCH_DAMAGE`, `OVERWATCH_SUPPORT`를 사용한다.
 
 GameProfile의 선호 포지션은 `Set<Position>`, MatchParticipant의 배정 포지션은 `Position`이다. GameProfile은 비어 있는 선택과 다른 게임의 포지션을 거절한다. 두 필드 모두 `@Enumerated(EnumType.STRING)`으로 이름을 저장한다.
 

@@ -1,9 +1,9 @@
 package com.example.teamforge;
 
-import com.example.teamforge.participant.entity.Game;
-import com.example.teamforge.participant.entity.Position;
+import com.example.teamforge.gameprofile.entity.Game;
+import com.example.teamforge.gameprofile.entity.Position;
 import com.example.teamforge.participant.entity.Participant;
-import com.example.teamforge.participant.entity.GameProfile;
+import com.example.teamforge.gameprofile.entity.GameProfile;
 import com.example.teamforge.match.entity.Match;
 import com.example.teamforge.match.entity.MatchParticipant;
 import com.example.teamforge.match.entity.MatchResult;
@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -28,14 +29,14 @@ class JpaModelTests {
     @Test
     void profileUpdatesAndSoftDeleteArePersisted() {
         // given: 참여자와 수동 점수 1500점인 프로필을 DB에 저장한다.
-        var participant = Participant.register("친구");
-        var profile = new GameProfile(participant.getId(), Game.LOL, null, 0, 1500, Set.of(Position.LOL_TOP, Position.LOL_MID));
+        Participant participant = Participant.register("친구");
+        GameProfile profile = new GameProfile(participant.getId(), Game.LOL, null, 0, 1500, Set.of(Position.LOL_TOP, Position.LOL_MID));
         em.persist(participant);
         em.persist(profile);
         em.flush();
         em.clear();
 
-        var loaded = em.find(GameProfile.class, profile.getId());
+        GameProfile loaded = em.find(GameProfile.class, profile.getId());
         long previousVersion = loaded.getVersion();
         // when: 환산 점수를 갱신하고 참여자를 논리 삭제한 뒤 DB에 반영한다.
         loaded.refreshScore(2000);
@@ -60,17 +61,17 @@ class JpaModelTests {
     @Test
     void matchCascadesSnapshotsAndEmbedsOptionalResult() {
         // given: 참가자 10명과 경기 결과가 없는 내전을 준비한다.
-        var players = IntStream.range(0, 10).mapToObj(i -> new MatchParticipant(
+        List<MatchParticipant> players = IntStream.range(0, 10).mapToObj(i -> new MatchParticipant(
                 persistParticipant("참가자" + i).getId(), "참가자" + i, 1000, Position.LOL_TOP,
                 i < 5 ? MatchParticipant.Team.A : MatchParticipant.Team.B)).toList();
-        var match = new Match(UUID.randomUUID(), Game.LOL, Instant.EPOCH, players, null);
+        Match match = new Match(UUID.randomUUID(), Game.LOL, Instant.EPOCH, players, null);
         // when: 내전을 저장하고 영속성 컨텍스트를 비운다.
         em.persist(match);
         em.flush();
         em.clear();
 
         // then: 참가자도 함께 저장되고 경기 결과는 비어 있다.
-        var loaded = em.find(Match.class, match.getId());
+        Match loaded = em.find(Match.class, match.getId());
         assertEquals(Instant.EPOCH, loaded.getCreatedAt());
         assertEquals(10, loaded.getParticipants().size());
         assertTrue(loaded.getParticipants().stream()
@@ -90,13 +91,13 @@ class JpaModelTests {
     @Test
     void overwatchPositionsAreStoredAsEnumNames() {
         // given: 오버워치 프로필과 5:5 편성을 준비한다.
-        var participant = Participant.register("오버워치 참가자");
-        var profile = new GameProfile(participant.getId(), Game.OVERWATCH, null, 1000, null,
+        Participant participant = Participant.register("오버워치 참가자");
+        GameProfile profile = new GameProfile(participant.getId(), Game.OVERWATCH, null, 1000, null,
                 Set.of(Position.OVERWATCH_SUPPORT));
-        var players = IntStream.range(0, 10).mapToObj(i -> new MatchParticipant(
+        List<MatchParticipant> players = IntStream.range(0, 10).mapToObj(i -> new MatchParticipant(
                 i == 0 ? participant.getId() : persistParticipant("참가자" + i).getId(), "참가자" + i, 1000,
                 Position.OVERWATCH_SUPPORT, i < 5 ? MatchParticipant.Team.A : MatchParticipant.Team.B)).toList();
-        var match = new Match(UUID.randomUUID(), Game.OVERWATCH, Instant.EPOCH, players, null);
+        Match match = new Match(UUID.randomUUID(), Game.OVERWATCH, Instant.EPOCH, players, null);
 
         // when: 저장 후 영속성 컨텍스트를 비운다.
         em.persist(participant);
@@ -118,7 +119,7 @@ class JpaModelTests {
                 .setParameter("id", match.getId()).getResultList().get(0));
     }
     private Participant persistParticipant(String name) {
-        var participant = Participant.register(name);
+        Participant participant = Participant.register(name);
         em.persist(participant);
         return participant;
     }
