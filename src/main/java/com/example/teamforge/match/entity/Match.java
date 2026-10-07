@@ -3,7 +3,7 @@ package com.example.teamforge.match.entity;
 import com.example.teamforge.common.exception.BusinessException;
 import com.example.teamforge.common.exception.ErrorCode;
 
-import com.example.teamforge.participant.entity.Game;
+import com.example.teamforge.gameprofile.entity.Game;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;

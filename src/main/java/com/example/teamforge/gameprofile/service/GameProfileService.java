@@ -1,13 +1,13 @@
-package com.example.teamforge.participant.service;
+package com.example.teamforge.gameprofile.service;
 
 import com.example.teamforge.common.exception.BusinessException;
 import com.example.teamforge.common.exception.ErrorCode;
-import com.example.teamforge.participant.dto.GameProfileRequest;
-import com.example.teamforge.participant.dto.GameProfileResponse;
-import com.example.teamforge.participant.entity.Game;
-import com.example.teamforge.participant.entity.GameProfile;
+import com.example.teamforge.gameprofile.dto.GameProfileRequest;
+import com.example.teamforge.gameprofile.dto.GameProfileResponse;
+import com.example.teamforge.gameprofile.entity.Game;
+import com.example.teamforge.gameprofile.entity.GameProfile;
 import com.example.teamforge.participant.entity.Participant;
-import com.example.teamforge.participant.repository.GameProfileRepository;
+import com.example.teamforge.gameprofile.repository.GameProfileRepository;
 import com.example.teamforge.participant.repository.ParticipantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

@@ -1,8 +1,8 @@
-package com.example.teamforge.participant.dto;
+package com.example.teamforge.gameprofile.dto;
 
-import com.example.teamforge.participant.entity.Game;
-import com.example.teamforge.participant.entity.GameProfile;
-import com.example.teamforge.participant.entity.Position;
+import com.example.teamforge.gameprofile.entity.Game;
+import com.example.teamforge.gameprofile.entity.GameProfile;
+import com.example.teamforge.gameprofile.entity.Position;
 
 import java.util.Set;
 import java.util.UUID;

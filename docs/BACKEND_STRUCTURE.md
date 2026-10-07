@@ -2,7 +2,7 @@
 
 ## 아키텍처 결정
 
-2026-09-19 기준, 단일 Gradle 프로젝트 안에서 **업무별 패키지 + 레이어드 아키텍처**를 사용한다. `participant`, `match`는 업무를 구분하는 일반 패키지이며 각 내부에 `controller`, `service`, `repository`, `entity`, `dto`를 둔다.
+단일 Gradle 프로젝트 안에서 **업무별 패키지 + 레이어드 아키텍처**를 사용한다. `participant`, `gameprofile`, `match`는 업무를 구분하는 일반 패키지이며 각 내부에 `controller`, `service`, `repository`, `entity`, `dto`를 둔다. 2026-10-08에 게임 프로필 기능을 `participant`에서 `gameprofile`로 분리했다.
 
 엄격한 DDD 모듈 경계와 Spring Modulith는 사용하지 않는다. 사용처·구현체가 없던 `ParticipantLookup`, `ParticipantSnapshot`과 Modulith 전용 경계 테스트를 제거했다. JPA 모델에 구현된 점수 보정, Soft Delete, 경기 기록 검증은 유지한다.
 
@@ -12,14 +12,19 @@
 com.example.teamforge
 ├── TeamForgeApplication
 ├── participant
-│   ├── controller              # ParticipantApi·Controller / GameProfileApi·Controller
-│   ├── service                 # ParticipantService / GameProfileService
-│   ├── repository              # ParticipantRepository / GameProfileRepository
-│   ├── dto                     # 참여자·페이징·게임 프로필 요청과 응답
+│   ├── controller              # ParticipantApi / ParticipantController
+│   ├── service                 # ParticipantService
+│   ├── repository              # ParticipantRepository
+│   ├── dto                     # 참여자·페이징 요청과 응답
+│   └── entity                  # Participant
+├── gameprofile
+│   ├── controller              # GameProfileApi / GameProfileController
+│   ├── service                 # GameProfileService
+│   ├── repository              # GameProfileRepository
+│   ├── dto                     # GameProfileRequest / GameProfileResponse
 │   └── entity
 │       ├── Game                # LOL / OVERWATCH enum
 │       ├── Position            # 게임 정보를 포함한 포지션 enum
-│       ├── Participant
 │       └── GameProfile
 ├── match
 │   ├── controller              # 패키지 안내만 존재, 구현 예정
@@ -97,13 +102,13 @@ GameProfileController는 GameProfileApi를 상속하며 아래와 같은 문서�
 
 기본 흐름은 `controller → service → repository`다. Entity는 controller나 service를 참조하지 않는다. 다른 업무의 기능이 필요하면 해당 service를 호출하는 방식으로 시작하고 순환 호출은 피한다. 이를 위해 별도의 조회 인터페이스나 변환 계층을 의무적으로 만들지는 않는다.
 
-`Game`은 참여자 게임 프로필에서 정의하며 match에서도 같은 enum을 사용한다. `TeamPreview`는 현재 내부 처리 결과이며 `MatchParticipant` 목록을 담는다. 향후 HTTP API에서는 필요한 필드만 담은 응답 DTO를 정의하고 JPA Entity를 그대로 직렬화하지 않는다.
+`participant`는 참여자 이름·등록·Soft Delete를, `gameprofile`은 게임 계정·점수·선호 포지션을 담당한다. GameProfileService는 참여자의 존재·활성 여부를 확인하기 위해 ParticipantRepository를 참조한다. 이 검증과 프로필 저장은 같은 트랜잭션에서 처리한다. `Game`과 `Position`은 `gameprofile.entity`에서 정의하며 match에서도 같은 enum을 사용한다. 패키지 분리는 API 경로와 DB 테이블·컬럼·enum 저장값을 변경하지 않는다. `TeamPreview`는 현재 내부 처리 결과이며 `MatchParticipant` 목록을 담는다. 향후 HTTP API에서는 필요한 필드만 담은 응답 DTO를 정의하고 JPA Entity를 그대로 직렬화하지 않는다.
 
 `Match.validateTeams(game, participants)`는 미리보기와 확정 기록이 공유하는 인원·중복·5:5·게임과 배정 포지션 일치 검증이다. 실제 포지션 배정과 점수 차이 최소화 알고리즘은 이후 `match.service` 아래 별도 계산 클래스로 구현해 HTTP·DB 없이 테스트한다.
 
 ## 외부 API 분리
 
-Riot 연동은 `external.riot` 패키지에 클라이언트, 외부 요청·응답 DTO, 통신 오류 처리를 모은다. 참여자 service가 클라이언트를 호출하고 결과를 내부 모델에 반영한다. API 키는 환경 변수 등 외부 설정에서 주입한다.
+Riot 연동은 `external.riot` 패키지에 클라이언트, 외부 요청·응답 DTO, 통신 오류 처리를 모은다. 게임 프로필 service가 클라이언트를 호출하고 결과를 내부 모델에 반영한다. API 키는 환경 변수 등 외부 설정에서 주입한다.
 
 현재는 패키지 수준 분리이며 별도 Gradle 모듈이나 HTTP 클라이언트 의존성을 추가하지 않았다. 실제 연동 구현 시 필요한 통신 의존성을 선택한다.
 
@@ -164,13 +169,15 @@ Match/TeamPreview는 인원·중복·5:5와 배정 포지션이 해당 게임에
 gradlew.bat test bootJar
 ```
 
-ParticipantEntityTests·MatchEntityTests로 기존 모델 규칙, JpaModelTests로 H2 저장·변경 감지·스냅샷 저장, TeamForgeApplicationTests로 컨텍스트 구성을 검증한다. Modulith 전용 경계 테스트는 새 구조에서 제거했다.
+ParticipantEntityTests·GameProfileEntityTests·MatchEntityTests로 각 모델 규칙, JpaModelTests로 H2 저장·변경 감지·스냅샷 저장, TeamForgeApplicationTests로 컨텍스트 구성을 검증한다. 프로필 테스트는 `gameprofile` 아래, 참여자 테스트는 `participant` 아래 둔다. Modulith 전용 경계 테스트는 새 구조에서 제거했다.
+
+Java 지역 변수는 테스트를 포함해 명시적 타입으로 선언하며 `var`를 사용하지 않는다.
 
 테스트 작성 시 `// given`, `// when`, `// then` 주석으로 준비·실행·검증을 구분한다. 예외 검증처럼 실행과 검증이 함께 이루어지는 경우 `// when / then`을 사용한다. 여러 상태 변경을 검증하는 테스트는 각 단계의 when/then을 반복해 표시한다.
 
 ## 포지션 타입
 
-`participant.entity.Position`은 게임 정보를 가진 단일 enum이다. 롤은 `LOL_TOP`, `LOL_JUNGLE`, `LOL_MID`, `LOL_BOTTOM`, `LOL_SUPPORT`, 오버워치는 `OVERWATCH_TANK`, `OVERWATCH_DAMAGE`, `OVERWATCH_SUPPORT`를 사용한다.
+`gameprofile.entity.Position`은 게임 정보를 가진 단일 enum이다. 롤은 `LOL_TOP`, `LOL_JUNGLE`, `LOL_MID`, `LOL_BOTTOM`, `LOL_SUPPORT`, 오버워치는 `OVERWATCH_TANK`, `OVERWATCH_DAMAGE`, `OVERWATCH_SUPPORT`를 사용한다.
 
 GameProfile의 선호 포지션은 `Set<Position>`, MatchParticipant의 배정 포지션은 `Position`이다. GameProfile은 비어 있는 선택과 다른 게임의 포지션을 거절한다. 두 필드 모두 `@Enumerated(EnumType.STRING)`으로 이름을 저장한다.
 

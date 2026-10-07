@@ -1,9 +1,9 @@
-package com.example.teamforge.participant.controller;
+package com.example.teamforge.gameprofile.controller;
 
 import com.example.teamforge.common.exception.ErrorResponse;
-import com.example.teamforge.participant.dto.GameProfileRequest;
-import com.example.teamforge.participant.dto.GameProfileResponse;
-import com.example.teamforge.participant.entity.Game;
+import com.example.teamforge.gameprofile.dto.GameProfileRequest;
+import com.example.teamforge.gameprofile.dto.GameProfileResponse;
+import com.example.teamforge.gameprofile.entity.Game;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;

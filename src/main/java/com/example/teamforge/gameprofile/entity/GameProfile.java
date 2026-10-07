@@ -1,4 +1,4 @@
-package com.example.teamforge.participant.entity;
+package com.example.teamforge.gameprofile.entity;
 
 import com.example.teamforge.common.exception.BusinessException;
 import com.example.teamforge.common.exception.ErrorCode;

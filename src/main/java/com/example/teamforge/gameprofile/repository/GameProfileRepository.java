@@ -1,7 +1,7 @@
-package com.example.teamforge.participant.repository;
+package com.example.teamforge.gameprofile.repository;
 
-import com.example.teamforge.participant.entity.Game;
-import com.example.teamforge.participant.entity.GameProfile;
+import com.example.teamforge.gameprofile.entity.Game;
+import com.example.teamforge.gameprofile.entity.GameProfile;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

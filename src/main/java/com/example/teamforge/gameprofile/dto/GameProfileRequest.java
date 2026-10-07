@@ -1,6 +1,6 @@
-package com.example.teamforge.participant.dto;
+package com.example.teamforge.gameprofile.dto;
 
-import com.example.teamforge.participant.entity.Position;
+import com.example.teamforge.gameprofile.entity.Position;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;

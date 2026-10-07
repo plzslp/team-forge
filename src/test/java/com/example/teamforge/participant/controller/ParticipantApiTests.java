@@ -1,9 +1,9 @@
 package com.example.teamforge.participant.controller;
 
 import com.example.teamforge.participant.entity.Participant;
-import com.example.teamforge.participant.entity.Game;
-import com.example.teamforge.participant.entity.GameProfile;
-import com.example.teamforge.participant.entity.Position;
+import com.example.teamforge.gameprofile.entity.Game;
+import com.example.teamforge.gameprofile.entity.GameProfile;
+import com.example.teamforge.gameprofile.entity.Position;
 import com.example.teamforge.match.entity.Match;
 import com.example.teamforge.match.entity.MatchParticipant;
 import com.example.teamforge.participant.repository.ParticipantRepository;
@@ -16,10 +16,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import java.util.Set;
 import java.util.stream.IntStream;
@@ -45,7 +48,7 @@ class ParticipantApiTests {
         String body = "{\"name\":\"  참여자  \"}";
 
         // when: 등록 API를 호출하고 DB에 반영한 뒤 영속성 컨텍스트를 비운다.
-        var response = mvc.perform(post("/api/participants")
+        MockHttpServletResponse response = mvc.perform(post("/api/participants")
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("참여자"))
@@ -87,7 +90,7 @@ class ParticipantApiTests {
         long count = repository.count();
 
         // when: 등록 API에 잘못된 입력을 전달한다.
-        var result = mvc.perform(post("/api/participants")
+        ResultActions result = mvc.perform(post("/api/participants")
                 .contentType(MediaType.APPLICATION_JSON).content(body));
 
         // then: 공통 오류를 반환하고 참여자를 저장하지 않는다.
@@ -173,7 +176,7 @@ class ParticipantApiTests {
         em.persist(Participant.register("동명이인"));
         em.flush();
         em.clear();
-        var ids = em.createQuery("select p.id from Participant p order by p.id asc", UUID.class)
+        List<UUID> ids = em.createQuery("select p.id from Participant p order by p.id asc", UUID.class)
                 .getResultList();
 
         // when / then: sort 파라미터는 정렬을 바꾸지 않으며 두 페이지가 ID 순서로 연결된다.
@@ -410,7 +413,7 @@ class ParticipantApiTests {
         GameProfile profile = new GameProfile(participant.getId(), Game.LOL, null, 1000, 1500,
                 Set.of(Position.LOL_TOP));
         em.persist(profile);
-        var players = IntStream.range(0, 10).mapToObj(i -> {
+        List<MatchParticipant> players = IntStream.range(0, 10).mapToObj(i -> {
             Participant player = i == 0 ? participant : Participant.register("참여자" + i);
             if (i != 0) em.persist(player);
             return new MatchParticipant(player.getId(), player.getName(), 1500, Position.LOL_TOP,
@@ -431,9 +434,9 @@ class ParticipantApiTests {
 
         // then: 프로필과 경기 스냅샷의 이름·점수·포지션·팀은 보존된다.
         assertEquals(1500, em.find(GameProfile.class, profile.getId()).effectiveScore());
-        var snapshots = em.find(Match.class, match.getId()).getParticipants();
+        List<MatchParticipant> snapshots = em.find(Match.class, match.getId()).getParticipants();
         assertEquals(10, snapshots.size());
-        var snapshot = snapshots.stream().filter(p -> p.getParticipantId().equals(participant.getId()))
+        MatchParticipant snapshot = snapshots.stream().filter(p -> p.getParticipantId().equals(participant.getId()))
                 .findFirst().orElseThrow();
         assertEquals("확정 당시 이름", snapshot.getName());
         assertEquals(1500, snapshot.getScore());
