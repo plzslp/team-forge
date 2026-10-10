@@ -18,10 +18,10 @@ com.example.teamforge
 │   ├── dto                     # 참여자·페이징 요청과 응답
 │   └── entity                  # Participant
 ├── gameprofile
-│   ├── controller              # GameProfileApi / GameProfileController
+│   ├── controller              # GameProfileApi·Controller / GameProfileListApi·Controller
 │   ├── service                 # GameProfileService
 │   ├── repository              # GameProfileRepository
-│   ├── dto                     # GameProfileRequest / GameProfileResponse
+│   ├── dto                     # 프로필 편집·목록 검색·페이지 요청과 응답
 │   └── entity
 │       ├── Game                # LOL / OVERWATCH enum
 │       ├── Position            # 게임 정보를 포함한 포지션 enum
@@ -71,7 +71,7 @@ ParticipantService의 조회는 읽기 전용 트랜잭션, 등록·수정·삭�
 }
 ```
 
-참여자가 없거나 마지막 페이지 이후를 요청하면 content는 빈 배열이다. totalElements와 totalPages에는 삭제되지 않은 참여자 전체 기준의 값을 반환한다. 기존 배열 응답에서 페이지 객체로 바뀌었으므로 프론트 연결 시 content를 읽고 페이지 간 선택된 참여자를 유지해야 한다. 게임·검색·포지션 필터와 화면 페이지 이동은 후속 작업이다.
+참여자가 없거나 마지막 페이지 이후를 요청하면 content는 빈 배열이다. totalElements와 totalPages에는 삭제되지 않은 참여자 전체 기준의 값을 반환한다. 기존 배열 응답에서 페이지 객체로 바뀌었으므로 프론트 연결 시 content를 읽고 페이지 간 선택된 참여자를 유지해야 한다. 게임·이름·포지션 검색에는 아래 게임 프로필 목록 API를 사용한다. 화면의 페이지 이동은 후속 작업이다.
 
 ParticipantController는 ParticipantApi 추상 클래스를 상속한다. ParticipantApi는 메서드 선언과 Swagger 문서 어노테이션(`@Tag`, `@Operation`, `@ApiResponses`, `@ParameterObject`)을 정의한다. Controller는 HTTP 매핑(`@RequestMapping`, `@GetMapping`, `@PostMapping`, `@PatchMapping`, `@DeleteMapping`), 요청 바인딩(`@PathVariable`, `@RequestBody`, `@ModelAttribute`), 검증 실행(`@Valid`), 서비스 호출과 HTTP 응답을 담당한다. DTO는 Bean Validation 제약과 필드의 Swagger 스키마를 정의한다. 같은 매핑·바인딩·검증 어노테이션을 Api와 Controller에 중복 작성하지 않는다. springdoc-openapi 3.1.1을 사용하며 `/swagger-ui.html`과 `/v3/api-docs`에서 확인한다. ParticipantApiTests는 실제 DB 저장·조회, 입력 검증, 삭제된 참여자 제외와 상위 클래스의 OpenAPI 문서 반영을 검증한다.
 
@@ -81,6 +81,7 @@ ParticipantController는 ParticipantApi 추상 클래스를 상속한다. Partic
 | --- | --- | --- |
 | PUT | `/api/participants/{participantId}/profiles/{game}` | 신규 등록 201 + Location, 기존 프로필 전체 수정 200 |
 | GET | `/api/participants/{participantId}/profiles/{game}` | 활성 참여자의 해당 게임 프로필 조회 200 |
+| GET | `/api/game-profiles?game=LOL&page=0&size=20` | 게임별 참여자·프로필 목록, 이름·포지션 필터와 페이지 정보 반환 200 |
 
 game은 `LOL` 또는 `OVERWATCH`다. 입력 예시는 `{"accountId":"계정#태그","manualScore":1500,"preferredPositions":["LOL_TOP","LOL_MID"]}`다. 계정은 앞뒤 공백 제거 후 255자 이하이며 빈 값·null·생략은 연결 해제로 처리한다. 수동 점수는 음이 아닌 정수 또는 null이며 null·생략은 보정 해제다. 선호 포지션은 해당 게임의 enum 값으로 하나 이상 전달해야 하며 null 원소는 허용하지 않는다. PUT은 수동 편집 항목 전체를 교체하므로 생략된 계정·수동 점수는 유지하지 않는다.
 
@@ -89,6 +90,14 @@ game은 `LOL` 또는 `OVERWATCH`다. 입력 예시는 `{"accountId":"계정#태�
 GameProfileRepository는 참여자·게임으로 프로필을 찾고 기존 DB 유일 제약으로 조합별 하나를 보장한다. GameProfileService의 조회는 읽기 전용, 등록·수정은 쓰기 트랜잭션을 사용한다. 기존 프로필은 관리 상태에서 변경하며 `@Version`으로 동시 변경 충돌을 감지한다. 동시 신규 등록의 유일 제약 충돌은 공통 409로 처리한다. 참여자·프로필이 없거나 삭제된 참여자의 조회는 404, 삭제된 참여자의 등록·수정은 409다. 입력 형식·범위 오류는 400 / INVALID_REQUEST, 다른 게임의 포지션은 400 / INVALID_PREFERRED_POSITION이다. 기존 참여자 목록·상세 응답은 변경하지 않으며 V1 마이그레이션도 수정하지 않는다.
 
 GameProfileController는 GameProfileApi를 상속하며 아래와 같은 문서·HTTP 처리 책임 분리를 적용한다. GameProfileApiTests는 두 게임의 등록과 조회, 기존 환산 점수 보존, 보정 해제·0점, 반복 PUT, 입력 오류, 삭제된 참여자 제한과 Swagger 계약을 실제 DB·MockMvc로 검증한다.
+
+목록은 별도 GameProfileListController → GameProfileService → GameProfileRepository로 처리하며 문서는 GameProfileListApi에서 정의한다. 필수 game은 `LOL` 또는 `OVERWATCH`, 선택 keyword는 참여자 이름 부분 검색, 선택 position은 해당 게임의 선호 포지션 필터다. 두 검색 조건은 AND로 결합한다. keyword는 앞뒤 공백 제거 후 최대 20자이며 빈 값은 전체 조회, 영문 대소문자는 무시한다. `%`, `_`, `!`는 이름에 포함된 일반 문자로 검색한다. 다른 게임의 포지션이나 알 수 없는 enum은 400 / INVALID_REQUEST다.
+
+선택한 게임의 프로필이 있는 활성 참여자만 이름·참여자 ID 오름차순으로 조회한다. 정렬 변경은 지원하지 않는다. page 기본 0, size 기본 20·범위 1~100이며 기본값은 생략 시에만 적용한다. 명시적인 빈 페이징 값·잘못된 형식·범위·int 범위를 넘는 offset은 400이다. 응답은 content, page, size, totalElements, totalPages이며 전체 개수는 적용한 필터 기준이다. 결과가 없거나 마지막 페이지 이후이면 200과 빈 content를 반환하고 해당 필터의 전체 개수는 유지한다.
+
+각 content 항목은 participantId, profileId, name, game, accountId, effectiveScore, preferredPositions를 담는다. 화면의 참여자 선택은 participantId를 기준으로 유지한다. effectiveScore는 수동 점수(null이 아니면 0도 포함)가 우선하며 보정이 없으면 환산 점수다. 포지션 필터를 적용해도 해당 프로필의 선호 포지션 전체를 반환한다. 프로필이 없는 참여자는 이 목록에 없으므로 기본 참여자 관리에는 기존 `/api/participants`를 사용한다.
+
+페이지 쿼리는 GameProfileListRow로 프로필 ID·참여자 이름을 먼저 조회하고, 해당 페이지의 프로필과 포지션을 fetch join으로 한 번에 읽는다. 페이지 쿼리에는 컬렉션 fetch join을 넣지 않아 포지션 수에 따른 중복·메모리 페이징을 피한다. GameProfileListApiTests는 게임·활성 상태·검색·포지션·정렬·총 개수·기본값·입력 오류·Swagger 계약을 검증하며, 프로필 5개를 조회하는 경우 SQL 3개(페이지 대상·count·프로필과 포지션)로 처리되는지도 확인한다. 기존 API와 DB 스키마는 변경하지 않는다.
 
 ## 계층별 책임
 
@@ -152,7 +161,7 @@ Spring Modulith core/JPA/runtime/test와 BOM을 제거했다. 사용하지 않�
 
 1. PostgreSQL 운영 연결과 환경별 설정을 확정한다. 이후 스키마 변경은 후속 Flyway 마이그레이션으로 관리한다.
 2. 참여자 등록·목록·상세 조회·이름 수정·Soft Delete API는 구현했다. 프론트 화면과 연결한다.
-3. 참여자·게임 프로필 API를 프론트와 연결하고 게임·이름·포지션 필터를 추가한다.
+3. 게임·이름·포지션 필터를 포함한 프로필 목록 API와 참여자·프로필 편집 API를 프론트에 연결한다. 페이지 이동과 페이지 간 참여자 선택 유지도 구현한다.
 4. 포지션 우선 편성 알고리즘과 비선호 배정 승인 검증을 구현한다.
 5. 확정 시 최신 정보 검증·스냅샷 저장·경기 결과·최근 내전 조회를 구현한다.
 6. Riot API를 실제로 연동한다.
