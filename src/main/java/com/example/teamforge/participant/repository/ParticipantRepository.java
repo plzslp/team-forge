@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 public interface ParticipantRepository extends JpaRepository<Participant, UUID> {
@@ -13,4 +14,6 @@ public interface ParticipantRepository extends JpaRepository<Participant, UUID> 
     Page<Participant> findAllByDeletedAtIsNullOrderByNameAscIdAsc(Pageable pageable);
 
     Optional<Participant> findByIdAndDeletedAtIsNull(UUID id);
+
+    List<Participant> findAllByIdInAndDeletedAtIsNull(List<UUID> ids);
 }
