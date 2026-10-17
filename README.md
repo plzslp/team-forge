@@ -44,6 +44,9 @@ npm.cmd run dev -- --port 5173 --strictPort
 목록 조회는 `/api/participants?page=0&size=20`으로 요청하며, `content`와 페이지 정보를 반환합니다. 페이지 번호는 0부터, 크기는 1~100이며 이름·ID 오름차순으로 정렬합니다.
 
 게임별 참여자·프로필 목록은 `/api/game-profiles?game=LOL&page=0&size=20`으로 조회합니다. game은 필수(`LOL`·`OVERWATCH`)이며 keyword(이름 부분 검색)와 position(선호 포지션)으로 필터링할 수 있습니다. 해당 게임 프로필이 있는 활성 참여자만 반환하고, 목록에 이름·계정·적용 점수·선호 포지션을 포함합니다. 같은 페이지 규칙을 사용하며 프론트 연동은 후속 작업입니다.
+
+팀 편성 미리보기는 `POST /api/team-previews`에 game과 중복 없는 participantIds 10개를 전달합니다. 선호 포지션을 우선 충족하고 팀 점수 차이를 최소화한 5:5 결과와 변경 감지 버전을 반환하며 저장하지 않습니다. 롤은 각 포지션 1명, 오버워치는 탱커 1·딜러 2·서포터 2명입니다. 선호 편성이 불가능하면 409를 반환하고, `allowNonPreferredPositions: true`를 명시하면 비선호 배정 수를 최소화한 결과와 경고를 반환합니다. 편성 확정·기록 → Riot 연동 → 프론트 통합 순서로 후속 작업을 진행합니다.
+
 API 문서는 [Swagger UI](http://127.0.0.1:8080/swagger-ui.html)에서 확인할 수 있습니다.
 
 실행 종료는 해당 터미널에서 `Ctrl+C`를 누릅니다.

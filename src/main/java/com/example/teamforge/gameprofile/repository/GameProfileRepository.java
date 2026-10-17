@@ -17,6 +17,12 @@ import java.util.UUID;
 public interface GameProfileRepository extends JpaRepository<GameProfile, UUID> {
     Optional<GameProfile> findByParticipantIdAndGame(UUID participantId, Game game);
 
+    /** 편성 대상 10명의 해당 게임 프로필과 선호 포지션을 일괄 조회한다. */
+    @Query("select distinct g from GameProfile g left join fetch g.preferredPositions "
+            + "where g.participantId in :participantIds and g.game = :game")
+    List<GameProfile> findAllWithPositionsByParticipantIdsAndGame(
+            @Param("participantIds") List<UUID> participantIds, @Param("game") Game game);
+
     @Query(value = """
             select new com.example.teamforge.gameprofile.dto.GameProfileListRow(g.id, p.name)
             from GameProfile g join Participant p on p.id = g.participantId

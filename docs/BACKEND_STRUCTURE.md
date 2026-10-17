@@ -27,11 +27,13 @@ com.example.teamforge
 │       ├── Position            # 게임 정보를 포함한 포지션 enum
 │       └── GameProfile
 ├── match
-│   ├── controller              # 패키지 안내만 존재, 구현 예정
-│   ├── service                 # 패키지 안내만 존재, 구현 예정
+│   ├── controller              # TeamPreviewApi / TeamPreviewController
+│   ├── service                 # TeamPreviewService / TeamBalancer
 │   ├── repository              # 패키지 안내만 존재, 구현 예정
 │   ├── dto
-│   │   ├── TeamPreview         # 미저장 편성 결과 record
+│   │   ├── TeamPreview         # 미저장 내부 편성 결과 record
+│   │   ├── TeamPreviewRequest / TeamPreviewResponse
+│   │   ├── PreviewCandidate    # 엔티티와 분리한 계산 입력
 │   │   └── ParticipantVersions # 참여자·프로필 버전 쌍 record
 │   └── entity
 │       ├── Match
@@ -41,7 +43,7 @@ com.example.teamforge
     └── riot                   # 패키지 안내만 존재, 실제 연동 예정
 ```
 
-참여자 등록·목록·상세 조회·이름 수정·Soft Delete와 게임 프로필 등록·전체 수정·조회는 controller → service → repository → DB로 연결했다. 내전 API, Riot 통신과 실제 팀 편성 알고리즘은 아직 없다. 미구현 계층의 책임은 `package-info.java`로 남긴다.
+참여자·게임 프로필 API와 팀 편성 미리보기 API를 구현했다. 미리보기는 DB의 현재 정보를 읽어 계산만 수행한다. 내전 확정·기록 API와 Riot 통신은 아직 없다. 미구현 계층의 책임은 `package-info.java`로 남긴다.
 
 ### 참여자 API
 
@@ -99,6 +101,20 @@ GameProfileController는 GameProfileApi를 상속하며 아래와 같은 문서�
 
 페이지 쿼리는 GameProfileListRow로 프로필 ID·참여자 이름을 먼저 조회하고, 해당 페이지의 프로필과 포지션을 fetch join으로 한 번에 읽는다. 페이지 쿼리에는 컬렉션 fetch join을 넣지 않아 포지션 수에 따른 중복·메모리 페이징을 피한다. GameProfileListApiTests는 게임·활성 상태·검색·포지션·정렬·총 개수·기본값·입력 오류·Swagger 계약을 검증하며, 프로필 5개를 조회하는 경우 SQL 3개(페이지 대상·count·프로필과 포지션)로 처리되는지도 확인한다. 기존 API와 DB 스키마는 변경하지 않는다.
 
+### 팀 편성 미리보기 API
+
+`POST /api/team-previews`는 JSON으로 game(`LOL`·`OVERWATCH`), participantIds(중복 없는 UUID 10개), allowNonPreferredPositions(선택)를 받는다. 허용 값이 생략되거나 null이면 false이며 true일 때만 비선호 배정을 허용한다. 참가자가 없거나 삭제됐거나 해당 게임 프로필이 없으면 404 / RESOURCE_NOT_FOUND, 중복 ID는 400 / INVALID_TEAM_COMPOSITION, 잘못된 형식·인원 수·null ID는 400 / INVALID_REQUEST다.
+
+TeamPreviewService는 활성 참가자와 해당 게임 프로필·선호 포지션을 일괄 조회한다. 수동 점수가 있으면 0도 포함해 우선 사용하고, 없으면 환산 점수를 사용한다. 이름·점수·선호 포지션을 PreviewCandidate로 전달하고 두 엔티티 버전을 별도로 수집한다. TeamBalancer는 DB나 HTTP에 접근하지 않고 편성만 계산한다.
+
+롤은 팀별 탑·정글·미드·원딜·서포터 각 1명, 오버워치는 탱커 1·딜러 2·서포터 2명이다. A/B를 뒤집은 동일 분할을 제외한 126개 5:5 분할을 모두 비교한다. 각 팀은 32개 부분집합 상태의 동적 계획법으로 포지션 배정의 최소 위반 수를 구한다. 전체 비선호 배정 인원 수가 가장 적은 편성 중 팀 점수 차이를 최소화한다. 요청 순서에 관계없이 참가자 UUID로 정렬하며, 동일 조건의 동률 결과도 같은 편성으로 반환한다.
+
+선호 포지션만으로 편성할 수 없고 비선호를 허용하지 않으면 409 / PREFERRED_POSITION_UNAVAILABLE을 반환한다. 허용하면 최소 위반 편성과 경고를 반환한다. 응답은 game, teams(A/B 각각 participants·totalScore), scoreDifference, nonPreferredAssignmentCount, warnings, participantVersions다. 각 참가자는 participantId·name·score·assignedPosition·preferredPosition(선호 여부)을 담는다. 점수 합계와 차이는 long으로 계산해 int 합계 초과를 지원한다.
+
+미리보기는 저장하지 않으므로 성공 응답은 200이며 Match/MatchParticipant 행을 생성하지 않는다. JPA 엔티티와 임시 스냅샷 ID는 응답에 공개하지 않는다. participantVersions는 UUID마다 participantVersion·profileVersion을 담지만, 확정 승인 토큰이나 인증 수단은 아니다. 후속 확정 서비스는 클라이언트 점수·이름·버전을 신뢰하지 않고 최신 DB 정보·활성 상태·역할 구성·비선호 허용 여부를 다시 검증해야 한다. 현재 미리보기 조회는 동시 수정·삭제를 잠그지 않는다.
+
+TeamPreviewApi는 Swagger 문서, TeamPreviewController는 HTTP 매핑·바인딩·검증 실행과 ResponseEntity 반환을 담당한다. TeamBalancerTests는 독립적인 완전 순열 탐색과 비교해 최적성을 검증하고, TeamPreviewApiTests는 실제 DB·MockMvc로 입력 검증·버전·점수·미저장 동작·Swagger 계약을 검증한다.
+
 ## 계층별 책임
 
 | 계층 | 책임 |
@@ -111,9 +127,9 @@ GameProfileController는 GameProfileApi를 상속하며 아래와 같은 문서�
 
 기본 흐름은 `controller → service → repository`다. Entity는 controller나 service를 참조하지 않는다. 다른 업무의 기능이 필요하면 해당 service를 호출하는 방식으로 시작하고 순환 호출은 피한다. 이를 위해 별도의 조회 인터페이스나 변환 계층을 의무적으로 만들지는 않는다.
 
-`participant`는 참여자 이름·등록·Soft Delete를, `gameprofile`은 게임 계정·점수·선호 포지션을 담당한다. GameProfileService는 참여자의 존재·활성 여부를 확인하기 위해 ParticipantRepository를 참조한다. 이 검증과 프로필 저장은 같은 트랜잭션에서 처리한다. `Game`과 `Position`은 `gameprofile.entity`에서 정의하며 match에서도 같은 enum을 사용한다. 패키지 분리는 API 경로와 DB 테이블·컬럼·enum 저장값을 변경하지 않는다. `TeamPreview`는 현재 내부 처리 결과이며 `MatchParticipant` 목록을 담는다. 향후 HTTP API에서는 필요한 필드만 담은 응답 DTO를 정의하고 JPA Entity를 그대로 직렬화하지 않는다.
+`participant`는 참여자 이름·등록·Soft Delete를, `gameprofile`은 게임 계정·점수·선호 포지션을 담당한다. GameProfileService는 참여자의 존재·활성 여부를 확인하기 위해 ParticipantRepository를 참조한다. 이 검증과 프로필 저장은 같은 트랜잭션에서 처리한다. `Game`과 `Position`은 `gameprofile.entity`에서 정의하며 match에서도 같은 enum을 사용한다. TeamPreviewService도 두 repository를 이용해 편성 데이터를 일괄 조회한다. 패키지 분리는 API 경로와 DB 테이블·컬럼·enum 저장값을 변경하지 않는다. `TeamPreview`는 내부 처리 결과로 `MatchParticipant` 목록을 담고, HTTP에는 전용 TeamPreviewResponse로 변환한다.
 
-`Match.validateTeams(game, participants)`는 미리보기와 확정 기록이 공유하는 인원·중복·5:5·게임과 배정 포지션 일치 검증이다. 실제 포지션 배정과 점수 차이 최소화 알고리즘은 이후 `match.service` 아래 별도 계산 클래스로 구현해 HTTP·DB 없이 테스트한다.
+`Match.validateTeams(game, participants)`는 미리보기와 확정 기록이 공유하는 인원·중복·5:5·게임과 배정 포지션 일치 검증이다. 실제 포지션 배정과 점수 차이 최소화는 `match.service.TeamBalancer`에서 계산하고 HTTP·DB 없이 테스트한다.
 
 ## 외부 API 분리
 
@@ -160,15 +176,14 @@ Spring Modulith core/JPA/runtime/test와 BOM을 제거했다. 사용하지 않�
 ## 남은 구현과 주의점
 
 1. PostgreSQL 운영 연결과 환경별 설정을 확정한다. 이후 스키마 변경은 후속 Flyway 마이그레이션으로 관리한다.
-2. 참여자 등록·목록·상세 조회·이름 수정·Soft Delete API는 구현했다. 프론트 화면과 연결한다.
-3. 게임·이름·포지션 필터를 포함한 프로필 목록 API와 참여자·프로필 편집 API를 프론트에 연결한다. 페이지 이동과 페이지 간 참여자 선택 유지도 구현한다.
-4. 포지션 우선 편성 알고리즘과 비선호 배정 승인 검증을 구현한다.
-5. 확정 시 최신 정보 검증·스냅샷 저장·경기 결과·최근 내전 조회를 구현한다.
-6. Riot API를 실제로 연동한다.
+2. 미리보기는 구현했다. 확정 시 최신 정보 검증·역할 구성·비선호 배정 허용 재검증·스냅샷 저장을 구현한다.
+3. 편성 기록·경기 결과·최근 내전 조회를 구현한다.
+4. Riot API를 실제로 연동한다.
+5. 백엔드 계약 완성 후 참여자·프로필·미리보기·내전 기록 API를 프론트에 연결한다. 페이지 이동과 페이지 간 참여자 선택 유지도 구현한다.
 
 미리보기의 `participantVersions`는 참가자 UUID마다 `ParticipantVersions(participantVersion, profileVersion)`를 보관한다. 참여자와 해당 게임 프로필의 독립적인 버전을 모두 표현하며, 원본 맵은 복사하고 참가자 목록과 키가 일치하는지 검증한다. 확정 서비스는 아직 없으므로 최신 DB 버전 비교는 미구현이다. 향후 두 버전과 활성 상태를 서버에서 확인하고, 검증과 저장 사이 경쟁 상태를 트랜잭션·잠금으로 처리해야 한다. 버전 값을 보관하는 것만으로 오래된 정보의 확정을 방지하지는 않는다.
 
-Match/TeamPreview는 인원·중복·5:5와 배정 포지션이 해당 게임에 속하는지 검증한다. 팀별 역할 구성과 비선호 배정 승인은 미구현이다. 티어·LP 원본, 조회 시각과 계정 유일성도 후속 설계 대상이다. 참여자 UUID 참조의 존재 여부는 DB 외래 키로 보장한다. 백엔드는 `OVERWATCH`, 프론트는 `OW`를 사용하므로 API 연결 시 통일 또는 변환이 필요하다.
+Match/TeamPreview는 인원·중복·5:5와 배정 포지션이 해당 게임에 속하는지 검증한다. 미리보기의 팀별 역할 구성과 비선호 허용은 TeamBalancer에서 처리하며, 수동 교체 후 확정 시 재검증은 후속 작업이다. 티어·LP 원본, 조회 시각과 계정 유일성도 후속 설계 대상이다. 참여자 UUID 참조의 존재 여부는 DB 외래 키로 보장한다. 백엔드는 `OVERWATCH`, 프론트는 `OW`를 사용하므로 API 연결 시 통일 또는 변환이 필요하다.
 
 ## 검증
 

@@ -25,7 +25,8 @@ public enum ErrorCode {
     INVALID_MATCH_SCORE(HttpStatus.BAD_REQUEST, "경기 스코어는 음수일 수 없습니다."),
     INVALID_MATCH_MEMO(HttpStatus.BAD_REQUEST, "메모는 2000자 이하로 입력하세요."),
     INVALID_PREVIEW_VERSION(HttpStatus.BAD_REQUEST, "참여자와 프로필 버전은 음수일 수 없습니다."),
-    PREVIEW_PARTICIPANTS_MISMATCH(HttpStatus.BAD_REQUEST, "참가자별 변경 감지 버전이 필요합니다.");
+    PREVIEW_PARTICIPANTS_MISMATCH(HttpStatus.BAD_REQUEST, "참가자별 변경 감지 버전이 필요합니다."),
+    PREFERRED_POSITION_UNAVAILABLE(HttpStatus.CONFLICT, "선호 포지션만으로 편성할 수 없습니다. 비선호 배정 허용 후 다시 요청하세요.");
 
     private final HttpStatus status;
     private final String message;
