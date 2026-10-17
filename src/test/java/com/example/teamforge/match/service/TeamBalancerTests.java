@@ -38,7 +38,7 @@ class TeamBalancerTests {
             preferred.add(roles.get(random.nextInt(roles.size())));
             candidates.add(candidate(index, random.nextInt(1000), preferred));
         }
-        // when: DP를 사용하지 않는 완전 순열 탐색으로 기준값을 구한다.
+        // given: DP를 사용하지 않는 완전 순열 탐색으로 비교할 기준값도 준비한다.
         int expectedViolations = Integer.MAX_VALUE;
         long expectedDifference = Long.MAX_VALUE;
         for (int mask = 0; mask < 1024; mask++) {
@@ -56,8 +56,9 @@ class TeamBalancerTests {
                 expectedDifference = difference;
             }
         }
-        // then
+        // when
         List<MatchParticipant> result = balancer.balance(game, candidates, true);
+        // then
         assertEquals(expectedViolations, violations(candidates, result));
         assertEquals(expectedDifference, difference(result));
     }
@@ -132,8 +133,9 @@ class TeamBalancerTests {
             candidates.add(candidate(team * 5 + 3, 0, Set.of(Position.LOL_BOTTOM)));
             candidates.add(candidate(team * 5 + 4, 0, Set.of(Position.LOL_SUPPORT)));
         }
-        // when / then
+        // when
         List<MatchParticipant> result = balancer.balance(Game.LOL, candidates, false);
+        // then
         assertEquals(0, violations(candidates, result));
         assertTeamRoles(Game.LOL, result);
     }
@@ -167,9 +169,10 @@ class TeamBalancerTests {
         List<PreviewCandidate> candidates = candidates(Game.LOL);
         List<PreviewCandidate> reversed = new ArrayList<>(candidates);
         Collections.reverse(reversed);
-        // when / then: 생성되는 스냅샷 ID를 제외한 실제 편성은 같다.
+        // when
         List<MatchParticipant> first = balancer.balance(Game.LOL, candidates, false);
         List<MatchParticipant> second = balancer.balance(Game.LOL, reversed, false);
+        // then: 생성되는 스냅샷 ID를 제외한 실제 편성은 같다.
         for (int index = 0; index < 10; index++) {
             assertEquals(first.get(index).getParticipantId(), second.get(index).getParticipantId());
             assertEquals(first.get(index).getAssignedPosition(), second.get(index).getAssignedPosition());
@@ -183,8 +186,9 @@ class TeamBalancerTests {
         List<PreviewCandidate> candidates = candidates(Game.LOL).stream()
                 .map(candidate -> new PreviewCandidate(candidate.participantId(), candidate.name(), Integer.MAX_VALUE,
                         candidate.preferredPositions())).toList();
-        // when / then
+        // when
         List<MatchParticipant> result = balancer.balance(Game.LOL, candidates, false);
+        // then
         assertEquals(0, difference(result));
         assertEquals(5L * Integer.MAX_VALUE, result.stream().filter(p -> p.getTeam() == MatchParticipant.Team.A)
                 .mapToLong(MatchParticipant::getScore).sum());
@@ -192,10 +196,13 @@ class TeamBalancerTests {
 
     @Test
     void rejectsDuplicateParticipantsAndWrongGameRoles() {
+        // given: 같은 참가자가 두 번 포함된 편성 입력을 준비한다.
         List<PreviewCandidate> duplicate = new ArrayList<>(candidates(Game.LOL));
         duplicate.set(9, duplicate.get(0));
+        // when / then: 중복 참가자는 거절한다.
         BusinessException error = assertThrows(BusinessException.class, () -> balancer.balance(Game.LOL, duplicate, false));
         assertEquals(ErrorCode.INVALID_TEAM_COMPOSITION, error.getErrorCode());
+        // when / then: 롤 포지션을 가진 참가자로 오버워치 편성을 요청하면 거절한다.
         BusinessException roles = assertThrows(BusinessException.class,
                 () -> balancer.balance(Game.OVERWATCH, candidates(Game.LOL), false));
         assertEquals(ErrorCode.INVALID_PREFERRED_POSITION, roles.getErrorCode());

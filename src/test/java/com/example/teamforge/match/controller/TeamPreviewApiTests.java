@@ -41,8 +41,9 @@ class TeamPreviewApiTests {
     void returnsTwoTeamsScoresAndVersionsWithoutSavingMatch(Game game) throws Exception {
         // given: 최대 점수로 long 합계와 DB 입력 버전도 검증한다.
         List<UUID> ids = saveCandidates(game, false);
-        // when / then
+        // when
         mvc.perform(post("/api/team-previews").contentType(MediaType.APPLICATION_JSON).content(request(game, ids, false)))
+                // then
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.game").value(game.name()))
                 .andExpect(jsonPath("$.teams", hasSize(2)))
@@ -75,9 +76,10 @@ class TeamPreviewApiTests {
         long participantVersion = participant.getVersion();
         long profileVersion = profile.getVersion();
         em.clear();
-        // when / then: 수동 0점이 환산 점수보다 우선한다.
+        // when
         mvc.perform(post("/api/team-previews").contentType(MediaType.APPLICATION_JSON)
                         .content(request(Game.LOL, ids, false)))
+                // then: 수동 0점이 환산 점수보다 우선한다.
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.teams[*].participants[?(@.name == '변경된 이름')].score", contains(0)))
                 .andExpect(jsonPath("$.scoreDifference").value((long) Integer.MAX_VALUE))
@@ -87,16 +89,21 @@ class TeamPreviewApiTests {
 
     @Test
     void rejectsImpossibleRolesByDefaultAndReturnsWarningsWhenAllowed() throws Exception {
+        // given: 모두 탑만 선호하여 선호 포지션만으로 편성할 수 없는 참가자를 준비한다.
         List<UUID> ids = saveCandidates(Game.LOL, true);
+        // when / then: 비선호 허용 옵션을 생략하면 편성을 거절한다.
         mvc.perform(post("/api/team-previews").contentType(MediaType.APPLICATION_JSON)
                         .content(request(Game.LOL, ids, false).replace(",\"allowNonPreferredPositions\":false", "")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("PREFERRED_POSITION_UNAVAILABLE"));
+        // when / then: 비선호 허용 옵션이 null이어도 편성을 거절한다.
         mvc.perform(post("/api/team-previews").contentType(MediaType.APPLICATION_JSON)
                         .content(request(Game.LOL, ids, false).replace("\"allowNonPreferredPositions\":false", "\"allowNonPreferredPositions\":null")))
                 .andExpect(status().isConflict());
+        // when: 비선호 배정을 명시적으로 허용한다.
         mvc.perform(post("/api/team-previews").contentType(MediaType.APPLICATION_JSON)
                         .content(request(Game.LOL, ids, true)))
+                // then: 최소 비선호 배정 인원과 경고를 반환한다.
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nonPreferredAssignmentCount").value(8))
                 .andExpect(jsonPath("$.warnings", hasSize(1)));
@@ -105,6 +112,7 @@ class TeamPreviewApiTests {
     @ParameterizedTest
     @ValueSource(strings = {"missing", "deleted", "no-profile", "other-game"})
     void rejectsUnavailableParticipantsOrProfiles(String reason) throws Exception {
+        // given: 조회 불가 사유에 맞춰 참가자 또는 해당 게임 프로필을 변경한다.
         List<UUID> ids = saveCandidates(Game.LOL, false);
         UUID id = ids.get(0);
         switch (reason) {
@@ -122,14 +130,17 @@ class TeamPreviewApiTests {
         }
         em.flush();
         em.clear();
+        // when / then: 존재하지 않거나 삭제된 참가자, 해당 게임 프로필 누락을 거절한다.
         mvc.perform(post("/api/team-previews").contentType(MediaType.APPLICATION_JSON).content(request(Game.LOL, ids, false)))
                 .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 
     @Test
     void rejectsDuplicateIds() throws Exception {
+        // given: 같은 참가자 ID가 두 번 포함된 요청을 준비한다.
         List<UUID> ids = saveCandidates(Game.LOL, false);
         ids.set(9, ids.get(0));
+        // when / then: 중복된 ID로 편성을 요청하면 입력 오류를 반환한다.
         mvc.perform(post("/api/team-previews").contentType(MediaType.APPLICATION_JSON).content(request(Game.LOL, ids, false)))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_TEAM_COMPOSITION"));
     }
@@ -139,28 +150,38 @@ class TeamPreviewApiTests {
             "{\"game\":\"LOL\",\"participantIds\":[]}", "{\"game\":\"UNKNOWN\",\"participantIds\":[]}",
             "{\"game\":\"LOL\",\"participantIds\":[\"invalid-uuid\"]}"})
     void rejectsMalformedRequests(String body) throws Exception {
+        // given: 매개변수로 필수값 누락·잘못된 게임·UUID 등의 JSON 요청을 전달받는다.
+        // when / then: 잘못된 요청은 공통 입력 오류로 거절한다.
         mvc.perform(post("/api/team-previews").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 
     @Test
     void rejectsNullIdAndWrongParticipantCounts() throws Exception {
+        // given: 참가자 10명의 정상 요청을 기준으로 입력 오류를 만들 준비를 한다.
         List<UUID> ids = saveCandidates(Game.LOL, false);
         String valid = request(Game.LOL, ids, false);
+        // when / then: 참가자 ID 중 null이 있으면 거절한다.
         mvc.perform(post("/api/team-previews").contentType(MediaType.APPLICATION_JSON)
                         .content(valid.replace("\"" + ids.get(0) + "\"", "null")))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        // when / then: 참가자가 9명이면 거절한다.
         mvc.perform(post("/api/team-previews").contentType(MediaType.APPLICATION_JSON)
                         .content(request(Game.LOL, ids.subList(0, 9), false)))
                 .andExpect(status().isBadRequest());
+        // given: 참가자 수가 11명인 요청을 준비한다.
         ids.add(UUID.randomUUID());
+        // when / then: 참가자가 11명이면 거절한다.
         mvc.perform(post("/api/team-previews").contentType(MediaType.APPLICATION_JSON).content(request(Game.LOL, ids, false)))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void exposesSwaggerContractFromApiClass() throws Exception {
+        // given: TeamPreviewApi에 선언한 계약이 포함되는 OpenAPI 문서를 확인한다.
+        // when
         mvc.perform(get("/v3/api-docs"))
+                // then
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['/api/team-previews'].post.summary").value("팀 편성 미리보기"))
                 .andExpect(jsonPath("$.paths['/api/team-previews'].post.responses['409']").exists())
