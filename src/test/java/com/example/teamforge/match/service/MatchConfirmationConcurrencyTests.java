@@ -19,6 +19,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -28,12 +29,12 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -44,6 +45,7 @@ class MatchConfirmationConcurrencyTests {
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired MatchService matchService;
     @Autowired TeamPreviewService previewService;
+    @Autowired JdbcTemplate jdbc;
     private ExecutorService workers;
     private MatchCreateRequest request;
     private UUID participantId;
@@ -88,8 +90,10 @@ class MatchConfirmationConcurrencyTests {
         // given: 확정 서비스 반환 후에도 바깥 트랜잭션을 열어 잠금 유지 구간을 관찰한다.
         CountDownLatch confirmed = new CountDownLatch(1);
         CountDownLatch allowCommit = new CountDownLatch(1);
-        CountDownLatch updateAttempted = new CountDownLatch(1);
+        CompletableFuture<Integer> confirmingSession = new CompletableFuture<>();
+        CompletableFuture<Integer> updatingSession = new CompletableFuture<>();
         Future<MatchCreateResponse> confirmation = workers.submit(() -> transaction().execute(status -> {
+            confirmingSession.complete(currentSessionId());
             MatchCreateResponse result = matchService.create(request);
             confirmed.countDown();
             await(allowCommit);
@@ -98,16 +102,16 @@ class MatchConfirmationConcurrencyTests {
         try {
             assertTrue(confirmed.await(5, TimeUnit.SECONDS));
             Future<?> update = workers.submit(() -> transaction().executeWithoutResult(status -> {
+                updatingSession.complete(currentSessionId());
                 changeCurrentInformation(change, false);
-                updateAttempted.countDown();
                 em.flush();
             }));
 
-            // when: 다른 트랜잭션이 참가자 또는 프로필 변경을 DB에 반영하려 한다.
-            assertTrue(updateAttempted.await(5, TimeUnit.SECONDS));
+            // when: 수정 세션이 실제 DB 연산에 도달해 확정 세션의 잠금을 기다리는지 확인한다.
+            awaitDatabaseLock(updatingSession.get(5, TimeUnit.SECONDS), confirmingSession.get(5, TimeUnit.SECONDS), update);
 
-            // then: 확정 트랜잭션이 끝나기 전에는 변경을 완료할 수 없다.
-            assertThrows(TimeoutException.class, () -> update.get(200, TimeUnit.MILLISECONDS));
+            // then: 스레드 실행 지연이 아니라 DB 잠금으로 미완료인 상태에서 확정을 커밋한다.
+            assertFalse(update.isDone());
             allowCommit.countDown();
             MatchCreateResponse saved = confirmation.get(5, TimeUnit.SECONDS);
             update.get(5, TimeUnit.SECONDS);
@@ -132,8 +136,10 @@ class MatchConfirmationConcurrencyTests {
         // given: 수정 트랜잭션이 먼저 행을 잠그고, 변경은 아직 커밋하지 않는다.
         CountDownLatch modified = new CountDownLatch(1);
         CountDownLatch allowCommit = new CountDownLatch(1);
-        CountDownLatch confirmationAttempted = new CountDownLatch(1);
+        CompletableFuture<Integer> updatingSession = new CompletableFuture<>();
+        CompletableFuture<Integer> confirmingSession = new CompletableFuture<>();
         Future<?> update = workers.submit(() -> transaction().executeWithoutResult(status -> {
+            updatingSession.complete(currentSessionId());
             changeCurrentInformation(change, true);
             em.flush();
             modified.countDown();
@@ -143,12 +149,12 @@ class MatchConfirmationConcurrencyTests {
             assertTrue(modified.await(5, TimeUnit.SECONDS));
 
             // when: 이전 미리보기 버전으로 확정하려 하면 수정 트랜잭션 종료를 기다린다.
-            Future<MatchCreateResponse> confirmation = workers.submit(() -> {
-                confirmationAttempted.countDown();
+            Future<MatchCreateResponse> confirmation = workers.submit(() -> transaction().execute(status -> {
+                confirmingSession.complete(currentSessionId());
                 return matchService.create(request);
-            });
-            assertTrue(confirmationAttempted.await(5, TimeUnit.SECONDS));
-            assertThrows(TimeoutException.class, () -> confirmation.get(200, TimeUnit.MILLISECONDS));
+            }));
+            awaitDatabaseLock(confirmingSession.get(5, TimeUnit.SECONDS), updatingSession.get(5, TimeUnit.SECONDS), confirmation);
+            assertFalse(confirmation.isDone());
             allowCommit.countDown();
             update.get(5, TimeUnit.SECONDS);
 
@@ -163,6 +169,27 @@ class MatchConfirmationConcurrencyTests {
         } finally {
             allowCommit.countDown();
         }
+    }
+
+    private int currentSessionId() {
+        // 작업 트랜잭션과 동일한 JPA 연결에서 ID를 얻어 관찰 대상 세션을 정확히 지정한다.
+        return ((Number) em.createNativeQuery("select session_id()").getSingleResult()).intValue();
+    }
+
+    private void awaitDatabaseLock(int waitingSession, int blockingSession, Future<?> waitingTask) throws InterruptedException {
+        // 별도 JDBC 연결로 관찰한다. 특정 작업이 상대 작업의 잠금을 기다리는 관계까지 확인한다.
+        // H2 공식 스키마: https://h2database.github.io/html/systemtables.html#sessions
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        while (System.nanoTime() < deadline) {
+            Integer blocked = jdbc.queryForObject("""
+                    select count(*) from information_schema.sessions
+                    where session_id = ? and blocker_id = ?
+                    """, Integer.class, waitingSession, blockingSession);
+            if (Integer.valueOf(1).equals(blocked)) return;
+            assertFalse(waitingTask.isDone(), "DB 잠금 대기 없이 작업이 종료됨: 대기 세션=" + waitingSession + ", 보유 세션=" + blockingSession);
+            Thread.sleep(10);
+        }
+        fail("DB 잠금 대기 상태를 확인하지 못함: 대기 세션=" + waitingSession + ", 보유 세션=" + blockingSession);
     }
 
     private void changeCurrentInformation(String change, boolean lockFirst) {
