@@ -89,12 +89,7 @@ public class TeamBalancer {
 
     /** 각 항목은 한 사람이 들어갈 자리다. 오버워치의 딜러·서포터는 각각 두 자리를 차지한다. */
     private List<Position> slots(Game game) {
-        return switch (game) {
-            case LOL -> List.of(Position.LOL_TOP, Position.LOL_JUNGLE, Position.LOL_MID,
-                    Position.LOL_BOTTOM, Position.LOL_SUPPORT);
-            case OVERWATCH -> List.of(Position.OVERWATCH_TANK, Position.OVERWATCH_DAMAGE,
-                    Position.OVERWATCH_DAMAGE, Position.OVERWATCH_SUPPORT, Position.OVERWATCH_SUPPORT);
-        };
+        return game.teamPositions();
     }
 
     /**

@@ -27,12 +27,13 @@ com.example.teamforge
 │       ├── Position            # 게임 정보를 포함한 포지션 enum
 │       └── GameProfile
 ├── match
-│   ├── controller              # TeamPreviewApi / TeamPreviewController
-│   ├── service                 # TeamPreviewService / TeamBalancer
-│   ├── repository              # 패키지 안내만 존재, 구현 예정
+│   ├── controller              # TeamPreviewApi·Controller / MatchApi·Controller
+│   ├── service                 # TeamPreviewService / TeamBalancer / MatchService
+│   ├── repository              # MatchRepository
 │   ├── dto
 │   │   ├── TeamPreview         # 미저장 내부 편성 결과 record
 │   │   ├── TeamPreviewRequest / TeamPreviewResponse
+│   │   ├── MatchCreateRequest / MatchParticipantRequest / MatchCreateResponse
 │   │   ├── PreviewCandidate    # 엔티티와 분리한 계산 입력
 │   │   └── ParticipantVersions # 참여자·프로필 버전 쌍 record
 │   └── entity
@@ -43,7 +44,7 @@ com.example.teamforge
     └── riot                   # 패키지 안내만 존재, 실제 연동 예정
 ```
 
-참여자·게임 프로필 API와 팀 편성 미리보기 API를 구현했다. 미리보기는 DB의 현재 정보를 읽어 계산만 수행한다. 내전 확정·기록 API와 Riot 통신은 아직 없다. 미구현 계층의 책임은 `package-info.java`로 남긴다.
+참여자·게임 프로필 API와 팀 편성 미리보기·확정 API를 구현했다. 미리보기는 계산만 수행하고, 확정은 최신 DB 정보를 잠금·검증한 뒤 스냅샷을 저장한다. 내전 기록 조회·경기 결과 API와 Riot 통신은 아직 없다.
 
 ### 참여자 API
 
@@ -111,9 +112,45 @@ TeamPreviewService는 활성 참가자와 해당 게임 프로필·선호 포지
 
 선호 포지션만으로 편성할 수 없고 비선호를 허용하지 않으면 409 / PREFERRED_POSITION_UNAVAILABLE을 반환한다. 허용하면 최소 위반 편성과 경고를 반환한다. 응답은 game, teams(A/B 각각 participants·totalScore), scoreDifference, nonPreferredAssignmentCount, warnings, participantVersions다. 각 참가자는 participantId·name·score·assignedPosition·preferredPosition(선호 여부)을 담는다. 점수 합계와 차이는 long으로 계산해 int 합계 초과를 지원한다.
 
-미리보기는 저장하지 않으므로 성공 응답은 200이며 Match/MatchParticipant 행을 생성하지 않는다. JPA 엔티티와 임시 스냅샷 ID는 응답에 공개하지 않는다. participantVersions는 UUID마다 participantVersion·profileVersion을 담지만, 확정 승인 토큰이나 인증 수단은 아니다. 후속 확정 서비스는 클라이언트 점수·이름·버전을 신뢰하지 않고 최신 DB 정보·활성 상태·역할 구성·비선호 허용 여부를 다시 검증해야 한다. 현재 미리보기 조회는 동시 수정·삭제를 잠그지 않는다.
+미리보기는 저장하지 않으므로 성공 응답은 200이며 Match/MatchParticipant 행을 생성하지 않는다. JPA 엔티티와 임시 스냅샷 ID는 응답에 공개하지 않는다. participantVersions는 UUID마다 participantVersion·profileVersion을 담지만, 확정 승인 토큰이나 인증 수단은 아니다. 아래 확정 서비스에서 최신 DB 정보·활성 상태·역할 구성·비선호 허용 여부를 다시 검증한다. 미리보기 조회 자체는 동시 수정·삭제를 잠그지 않는다.
 
 TeamPreviewApi는 Swagger 문서, TeamPreviewController는 HTTP 매핑·바인딩·검증 실행과 ResponseEntity 반환을 담당한다. TeamBalancerTests는 독립적인 완전 순열 탐색과 비교해 최적성을 검증하고, TeamPreviewApiTests는 실제 DB·MockMvc로 입력 검증·버전·점수·미저장 동작·Swagger 계약을 검증한다.
+
+### 팀 편성 확정·저장 API
+
+`POST /api/matches`는 아래 JSON 필드를 받아 경기와 참가자 스냅샷 10개를 한 트랜잭션으로 저장한다.
+
+| 필드 | 계약 |
+| --- | --- |
+| game | 필수, LOL 또는 OVERWATCH |
+| participants | 필수, 중복 없는 10명. 각 항목은 participantId(UUID), team(A/B), assignedPosition 필수 |
+| participantVersions | 필수, 미리보기 응답의 참가자 UUID별 participantVersion·profileVersion. 최종 참가자 집합과 정확히 일치해야 함 |
+| allowNonPreferredPositions | 선택, 생략·null은 false. 최종 편성에 비선호 배정이 있으면 true 필요 |
+
+미리보기의 teams를 펼쳐 각 참가자에 team을 붙여 요청한다. 화면에서 같은 10명의 팀·포지션을 수동으로 바꿀 수 있지만 팀당 5명과 게임별 역할 구성은 유지해야 한다. 서버는 최종 구성을 다시 검증하며 TeamBalancer를 다시 호출해 수동 배정을 덮어쓰지 않는다. Game.teamPositions()에서 롤의 각 1명, 오버워치의 탱커 1·딜러 2·서포터 2명 규칙을 미리보기와 공유한다.
+
+이름·점수·생성 시각은 요청 계약에 없으며 서버의 현재 DB 정보와 시각으로 결정한다. 수동 점수가 null이 아니면 0도 우선 적용한다. Match와 MatchParticipant에는 확정 당시 이름·적용 점수·배정 포지션·팀이 저장되고, 이후 원본 정보 수정이나 논리 삭제로 과거 기록이 바뀌지 않는다. 경기 결과는 미입력(null)으로 생성한다.
+
+성공 응답은 201과 id·game·createdAt·teams·scoreDifference다. teams는 A/B 각각 participants와 totalScore를 담으며 참가자는 participantId·name·score·assignedPosition을 포함한다. 합계·차이는 long이다. 아직 조회 API를 제공하지 않으므로 이번 생성 응답에는 Location 헤더를 설정하지 않는다. 동일 POST를 반복하면 새 경기로 생성하며 요청 중복 방지 키는 지원하지 않는다.
+
+| 상태 | 대표 오류 |
+| --- | --- |
+| 400 | INVALID_REQUEST: JSON·중첩 DTO·필수값·인원 수·버전 형식 오류 |
+| 400 | INVALID_TEAM_COMPOSITION: 참가자 중복 또는 5:5 위반 |
+| 400 | PREVIEW_PARTICIPANTS_MISMATCH: 참가자와 버전 맵의 키 집합 불일치 |
+| 400 | POSITION_GAME_MISMATCH: 다른 게임의 포지션 |
+| 400 | INVALID_TEAM_POSITIONS: 팀별 역할 인원 불일치 |
+| 409 | PREVIEW_OUTDATED: 참가자·프로필 없음, 참가자 삭제, 어느 한 버전이라도 변경됨 |
+| 409 | NON_PREFERRED_POSITION_NOT_ALLOWED: 최종 비선호 배정을 명시적으로 허용하지 않음 |
+| 409 | CONCURRENT_MODIFICATION: DB 잠금 충돌·교착 또는 낙관적 잠금 충돌 |
+
+확정의 잠금 순서는 참가자 전체(ID순) → 해당 게임 프로필 전체(참가자 ID순)다. PESSIMISTIC_WRITE로 행을 잠근 후 활성 상태·두 버전을 검사하고 저장한다. 잠금은 조회 메서드 반환 시가 아니라 트랜잭션 커밋·롤백 때 해제된다. 이름 수정·삭제·점수·포지션 변경이 먼저 완료됐다면 오래된 버전을 거절한다. 확정이 먼저 잠금을 잡았다면 그 변경은 확정 종료 후 반영되어 과거 스냅샷을 바꾸지 않는다.
+
+프로필은 컬렉션 outer fetch join 없이 먼저 잠그고, 기존 fetch join 조회로 선호 포지션을 일괄 로딩한다. 이 분리는 PostgreSQL에서 outer join의 nullable 측을 FOR UPDATE로 잠그는 문제를 피하기 위함이다. DB 잠금은 이 애플리케이션의 JPA 변경 경로를 기준으로 검증하며, 직접 SQL로 버전 갱신을 우회하는 변경은 지원하지 않는다.
+
+MatchCreateApiTests는 실제 미리보기 → 확정 저장, 롤·오버워치, 수동 교체, 원본 변경 후 기록 보존, 버전·활성 상태·역할·허용 정책과 중첩 입력 검증을 확인한다. MatchConfirmationConcurrencyTests는 독립적으로 커밋되는 두 H2 트랜잭션으로 수정 선행과 확정 선행 양쪽의 잠금 동작을 확인한다. 운영 PostgreSQL에서의 잠금 동작 검증은 환경 구성 후 별도로 수행해야 한다.
+
+2026-10-30 검증: 확정 API 43건·동시성 8건·공통 잠금 오류 응답 추가 2건을 포함한 전체 227건과 `test bootJar`를 통과했다.
 
 ## 계층별 책임
 
@@ -176,14 +213,14 @@ Spring Modulith core/JPA/runtime/test와 BOM을 제거했다. 사용하지 않�
 ## 남은 구현과 주의점
 
 1. PostgreSQL 운영 연결과 환경별 설정을 확정한다. 이후 스키마 변경은 후속 Flyway 마이그레이션으로 관리한다.
-2. 미리보기는 구현했다. 확정 시 최신 정보 검증·역할 구성·비선호 배정 허용 재검증·스냅샷 저장을 구현한다.
-3. 편성 기록·경기 결과·최근 내전 조회를 구현한다.
+2. 미리보기와 확정 저장은 구현했다. 편성 기록 목록·상세 조회를 구현한다.
+3. 경기 결과 입력·수정과 참가자 최근 내전 조회를 구현한다.
 4. Riot API를 실제로 연동한다.
 5. 백엔드 계약 완성 후 참여자·프로필·미리보기·내전 기록 API를 프론트에 연결한다. 페이지 이동과 페이지 간 참여자 선택 유지도 구현한다.
 
-미리보기의 `participantVersions`는 참가자 UUID마다 `ParticipantVersions(participantVersion, profileVersion)`를 보관한다. 참여자와 해당 게임 프로필의 독립적인 버전을 모두 표현하며, 원본 맵은 복사하고 참가자 목록과 키가 일치하는지 검증한다. 확정 서비스는 아직 없으므로 최신 DB 버전 비교는 미구현이다. 향후 두 버전과 활성 상태를 서버에서 확인하고, 검증과 저장 사이 경쟁 상태를 트랜잭션·잠금으로 처리해야 한다. 버전 값을 보관하는 것만으로 오래된 정보의 확정을 방지하지는 않는다.
+미리보기의 `participantVersions`는 참가자 UUID마다 `ParticipantVersions(participantVersion, profileVersion)`를 보관한다. 참여자와 해당 게임 프로필의 독립적인 버전을 모두 표현한다. 확정 서비스는 참가자 집합과 버전 키 집합이 같은지, 현재 DB의 두 버전·활성 상태가 유효한지 검사하고 잠금 상태에서 스냅샷을 저장한다. 버전은 서버 발급 승인 토큰이 아니며 최초 미리보기 호출 여부를 인증하지 않는다.
 
-Match/TeamPreview는 인원·중복·5:5와 배정 포지션이 해당 게임에 속하는지 검증한다. 미리보기의 팀별 역할 구성과 비선호 허용은 TeamBalancer에서 처리하며, 수동 교체 후 확정 시 재검증은 후속 작업이다. 티어·LP 원본, 조회 시각과 계정 유일성도 후속 설계 대상이다. 참여자 UUID 참조의 존재 여부는 DB 외래 키로 보장한다. 백엔드는 `OVERWATCH`, 프론트는 `OW`를 사용하므로 API 연결 시 통일 또는 변환이 필요하다.
+Match/TeamPreview는 인원·중복·5:5와 배정 포지션이 해당 게임에 속하는지 검증한다. 미리보기의 역할 배정은 TeamBalancer가 계산하며, 확정 시 Match.validateRoleComposition()과 MatchService가 수동 교체 후 역할·비선호 허용을 재검증한다. 기존 Match 생성자에 역할 정책을 추가하지 않아 과거 저장 모델 테스트와 기존 생성 경로는 유지한다. 티어·LP 원본, 조회 시각과 계정 유일성도 후속 설계 대상이다. 백엔드는 `OVERWATCH`, 프론트는 `OW`를 사용하므로 API 연결 시 통일 또는 변환이 필요하다.
 
 ## 검증
 
@@ -251,7 +288,7 @@ Java의 참여자 참조 필드는 UUID로 유지한다. DB FK는 JPA 객체 연
 - 업무 입력 오류와 잘못된 JSON·파라미터·Bean Validation: 400
 - 삭제된 참여자 수정: 409 / PARTICIPANT_DELETED
 - Spring Data 제약 위반: 409 / DATA_CONFLICT
-- Spring Data 낙관적 잠금 충돌: 409 / CONCURRENT_MODIFICATION
+- Spring Data 낙관적·비관적 잠금 충돌: 409 / CONCURRENT_MODIFICATION
 - 미존재 경로·메서드·미디어 타입: Spring MVC가 결정한 404·405·415 등 상태와 표준 헤더 유지
 - 예상하지 못한 예외: 서버에 오류 로그를 남기고 500 / INTERNAL_SERVER_ERROR 반환
 
