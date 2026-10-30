@@ -1,5 +1,6 @@
-package com.example.teamforge.participant.dto;
+package com.example.teamforge.match.dto.request;
 
+import com.example.teamforge.gameprofile.entity.Game;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -7,10 +8,12 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 
-/** 참여자 목록 조회의 쿼리 파라미터와 검증 규칙을 정의한다. */
 @Getter
 @Setter
-public class ParticipantPageRequest {
+public class MatchListRequest {
+    @NotNull
+    @Schema(description = "조회할 게임", requiredMode = Schema.RequiredMode.REQUIRED)
+    private Game game;
 
     @NotNull
     @Min(0)

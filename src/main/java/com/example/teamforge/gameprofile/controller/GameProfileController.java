@@ -1,7 +1,7 @@
 package com.example.teamforge.gameprofile.controller;
 
-import com.example.teamforge.gameprofile.dto.GameProfileRequest;
-import com.example.teamforge.gameprofile.dto.GameProfileResponse;
+import com.example.teamforge.gameprofile.dto.request.GameProfileRequest;
+import com.example.teamforge.gameprofile.dto.response.GameProfileResponse;
 import com.example.teamforge.gameprofile.entity.Game;
 import com.example.teamforge.gameprofile.service.GameProfileService;
 import jakarta.validation.Valid;

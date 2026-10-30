@@ -1,12 +1,12 @@
-package com.example.teamforge.participant.dto;
+package com.example.teamforge.participant.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-public record ParticipantCreateRequest(
+public record ParticipantUpdateRequest(
         @NotBlank @Size(max = 20) String name) {
 
-    public ParticipantCreateRequest {
+    public ParticipantUpdateRequest {
         if (name != null) {
             name = name.strip();
         }

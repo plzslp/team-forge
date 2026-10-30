@@ -1,6 +1,7 @@
-package com.example.teamforge.match.dto;
+package com.example.teamforge.match.dto.request;
 
 import com.example.teamforge.gameprofile.entity.Game;
+import com.example.teamforge.match.dto.ParticipantVersions;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;

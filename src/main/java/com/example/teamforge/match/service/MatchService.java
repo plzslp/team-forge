@@ -4,9 +4,12 @@ import com.example.teamforge.common.exception.BusinessException;
 import com.example.teamforge.common.exception.ErrorCode;
 import com.example.teamforge.gameprofile.entity.GameProfile;
 import com.example.teamforge.gameprofile.repository.GameProfileRepository;
-import com.example.teamforge.match.dto.MatchCreateRequest;
-import com.example.teamforge.match.dto.MatchCreateResponse;
-import com.example.teamforge.match.dto.MatchParticipantRequest;
+import com.example.teamforge.match.dto.request.MatchCreateRequest;
+import com.example.teamforge.match.dto.response.MatchCreateResponse;
+import com.example.teamforge.match.dto.request.MatchParticipantRequest;
+import com.example.teamforge.match.dto.request.MatchListRequest;
+import com.example.teamforge.match.dto.response.MatchPageResponse;
+import com.example.teamforge.match.dto.response.MatchResponse;
 import com.example.teamforge.match.dto.ParticipantVersions;
 import com.example.teamforge.match.entity.Match;
 import com.example.teamforge.match.entity.MatchParticipant;
@@ -16,6 +19,8 @@ import com.example.teamforge.participant.repository.ParticipantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -33,6 +38,31 @@ public class MatchService {
     private final ParticipantRepository participantRepository;
     private final GameProfileRepository gameProfileRepository;
     private final MatchRepository matchRepository;
+
+    /** 페이지 순서는 ID 조회 결과로 유지하고, 페이지의 참가자 스냅샷은 한 번에 로딩한다. */
+    @Transactional(readOnly = true)
+    public MatchPageResponse findAll(MatchListRequest request) {
+        Integer page = request.getPage();
+        Integer size = request.getSize();
+        if (request.getGame() == null || page == null || size == null || page < 0 || size < 1 || size > 100
+                || (long) page * size > Integer.MAX_VALUE) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST);
+        }
+        Page<UUID> ids = matchRepository.findPageIdsByGame(request.getGame(), PageRequest.of(page, size));
+        if (ids.isEmpty()) {
+            return new MatchPageResponse(List.of(), page, size, ids.getTotalElements(), ids.getTotalPages());
+        }
+        Map<UUID, Match> matches = matchRepository.findAllWithParticipantsByIdIn(ids.getContent()).stream()
+                .collect(Collectors.toMap(Match::getId, Function.identity()));
+        return MatchPageResponse.from(ids.map(id -> MatchResponse.from(matches.get(id))));
+    }
+
+    @Transactional(readOnly = true)
+    public MatchResponse findById(UUID id) {
+        Match match = matchRepository.findWithParticipantsById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        return MatchResponse.from(match);
+    }
 
     /**
      * 최종 편성을 현재 DB 정보로 검증하고 이름·점수·포지션·팀을 스냅샷으로 저장한다.
