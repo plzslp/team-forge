@@ -12,6 +12,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -36,6 +37,7 @@ class GlobalExceptionHandlerTests {
             "deleted, 409, PARTICIPANT_DELETED",
             "integrity, 409, DATA_CONFLICT",
             "optimistic, 409, CONCURRENT_MODIFICATION",
+            "pessimistic, 409, CONCURRENT_MODIFICATION",
             "unexpected, 500, INTERNAL_SERVER_ERROR"
     })
     void exceptionsUseStableResponseWithoutInternalDetails(String scenario, int status, ErrorCode code) throws Exception {
@@ -172,6 +174,7 @@ class GlobalExceptionHandlerTests {
             "deleted, 409, PARTICIPANT_DELETED",
             "integrity, 409, DATA_CONFLICT",
             "optimistic, 409, CONCURRENT_MODIFICATION",
+            "pessimistic, 409, CONCURRENT_MODIFICATION",
             "unexpected, 500, INTERNAL_SERVER_ERROR"
     })
     void xmlAcceptDoesNotHideApplicationErrors(String scenario, int status, ErrorCode code) throws Exception {
@@ -207,6 +210,7 @@ class GlobalExceptionHandlerTests {
                 case "deleted" -> Participant.register("참여자").delete(Instant.EPOCH).rename("수정");
                 case "integrity" -> throw new DataIntegrityViolationException("private-detail: SQL constraint");
                 case "optimistic" -> throw new OptimisticLockingFailureException("private-detail: entity version");
+                case "pessimistic" -> throw new PessimisticLockingFailureException("private-detail: lock conflict");
                 default -> throw new IllegalStateException("private-detail: internal failure");
             }
         }

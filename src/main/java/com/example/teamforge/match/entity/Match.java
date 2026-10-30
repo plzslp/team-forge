@@ -4,12 +4,14 @@ import com.example.teamforge.common.exception.BusinessException;
 import com.example.teamforge.common.exception.ErrorCode;
 
 import com.example.teamforge.gameprofile.entity.Game;
+import com.example.teamforge.gameprofile.entity.Position;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -40,7 +42,7 @@ public class Match {
     @Version
     private Long version;
 
-    /** 포지션 정책과 최신 정보 검증은 후속 확정 서비스에서 수행한다. */
+    /** 최신 정보·팀별 역할·비선호 허용은 확정 서비스에서 검증한 뒤 생성한다. */
     public Match(UUID id, Game game, Instant createdAt, List<MatchParticipant> participants, MatchResult result) {
         this.id = Objects.requireNonNull(id);
         this.game = Objects.requireNonNull(game);
@@ -69,6 +71,21 @@ public class Match {
         }
         if (participants.stream().anyMatch(p -> !p.getAssignedPosition().supports(game))) {
             throw new BusinessException(ErrorCode.POSITION_GAME_MISMATCH);
+        }
+    }
+
+    /** 수동 교체 후에도 팀별로 게임이 요구하는 역할 인원을 정확히 채웠는지 확인한다. */
+    public static void validateRoleComposition(Game game, List<MatchParticipant> participants) {
+        validateTeams(game, participants);
+        List<Position> positions = game.teamPositions();
+        for (MatchParticipant.Team team : MatchParticipant.Team.values()) {
+            for (Position position : positions) {
+                int required = Collections.frequency(positions, position);
+                long assigned = participants.stream()
+                        .filter(participant -> participant.getTeam() == team && participant.getAssignedPosition() == position)
+                        .count();
+                if (assigned != required) throw new BusinessException(ErrorCode.INVALID_TEAM_POSITIONS);
+            }
         }
     }
 }

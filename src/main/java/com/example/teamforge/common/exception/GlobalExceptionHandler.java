@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -29,6 +30,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(OptimisticLockingFailureException.class)
     public ResponseEntity<ErrorResponse> handleOptimisticLockingFailure(OptimisticLockingFailureException exception) {
+        return response(ErrorCode.CONCURRENT_MODIFICATION);
+    }
+
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handlePessimisticLockingFailure(PessimisticLockingFailureException exception) {
         return response(ErrorCode.CONCURRENT_MODIFICATION);
     }
 

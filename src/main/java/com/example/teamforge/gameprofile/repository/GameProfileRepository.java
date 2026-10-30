@@ -9,6 +9,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 
 import java.util.List;
 import java.util.Optional;
@@ -16,6 +18,11 @@ import java.util.UUID;
 
 public interface GameProfileRepository extends JpaRepository<GameProfile, UUID> {
     Optional<GameProfile> findByParticipantIdAndGame(UUID participantId, Game game);
+
+    /** 컬렉션 조인 없이 프로필 행을 먼저 잠근다. 참가자 행을 잠근 이후에 호출한다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select g from GameProfile g where g.participantId in :ids and g.game = :game order by g.participantId")
+    List<GameProfile> findAllForMatchConfirmation(@Param("ids") List<UUID> ids, @Param("game") Game game);
 
     /** 편성 대상 10명의 해당 게임 프로필과 선호 포지션을 일괄 조회한다. */
     @Query("select distinct g from GameProfile g left join fetch g.preferredPositions "

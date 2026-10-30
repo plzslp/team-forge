@@ -26,7 +26,10 @@ public enum ErrorCode {
     INVALID_MATCH_MEMO(HttpStatus.BAD_REQUEST, "메모는 2000자 이하로 입력하세요."),
     INVALID_PREVIEW_VERSION(HttpStatus.BAD_REQUEST, "참여자와 프로필 버전은 음수일 수 없습니다."),
     PREVIEW_PARTICIPANTS_MISMATCH(HttpStatus.BAD_REQUEST, "참가자별 변경 감지 버전이 필요합니다."),
-    PREFERRED_POSITION_UNAVAILABLE(HttpStatus.CONFLICT, "선호 포지션만으로 편성할 수 없습니다. 비선호 배정 허용 후 다시 요청하세요.");
+    PREFERRED_POSITION_UNAVAILABLE(HttpStatus.CONFLICT, "선호 포지션만으로 편성할 수 없습니다. 비선호 배정 허용 후 다시 요청하세요."),
+    INVALID_TEAM_POSITIONS(HttpStatus.BAD_REQUEST, "각 팀의 게임별 포지션 구성을 확인하세요."),
+    PREVIEW_OUTDATED(HttpStatus.CONFLICT, "참가자 정보가 변경되었거나 사용할 수 없습니다. 팀 미리보기를 다시 생성하세요."),
+    NON_PREFERRED_POSITION_NOT_ALLOWED(HttpStatus.CONFLICT, "비선호 포지션 배정을 허용한 뒤 확정하세요.");
 
     private final HttpStatus status;
     private final String message;
