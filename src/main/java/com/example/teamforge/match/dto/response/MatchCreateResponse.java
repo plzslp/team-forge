@@ -1,4 +1,4 @@
-package com.example.teamforge.match.dto;
+package com.example.teamforge.match.dto.response;
 
 import com.example.teamforge.gameprofile.entity.Game;
 import com.example.teamforge.match.entity.Match;

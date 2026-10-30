@@ -1,7 +1,7 @@
 package com.example.teamforge.gameprofile.controller;
 
-import com.example.teamforge.gameprofile.dto.GameProfileListRequest;
-import com.example.teamforge.gameprofile.dto.GameProfilePageResponse;
+import com.example.teamforge.gameprofile.dto.request.GameProfileListRequest;
+import com.example.teamforge.gameprofile.dto.response.GameProfilePageResponse;
 import com.example.teamforge.gameprofile.service.GameProfileService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

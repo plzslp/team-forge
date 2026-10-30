@@ -1,4 +1,4 @@
-package com.example.teamforge.participant.dto;
+package com.example.teamforge.participant.dto.response;
 
 import com.example.teamforge.participant.entity.Participant;
 

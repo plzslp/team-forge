@@ -1,4 +1,4 @@
-package com.example.teamforge.gameprofile.dto;
+package com.example.teamforge.gameprofile.dto.request;
 
 import com.example.teamforge.gameprofile.entity.Position;
 import io.swagger.v3.oas.annotations.media.Schema;

@@ -1,8 +1,8 @@
 package com.example.teamforge.gameprofile.controller;
 
 import com.example.teamforge.common.exception.ErrorResponse;
-import com.example.teamforge.gameprofile.dto.GameProfileRequest;
-import com.example.teamforge.gameprofile.dto.GameProfileResponse;
+import com.example.teamforge.gameprofile.dto.request.GameProfileRequest;
+import com.example.teamforge.gameprofile.dto.response.GameProfileResponse;
 import com.example.teamforge.gameprofile.entity.Game;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;

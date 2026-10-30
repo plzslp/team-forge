@@ -15,13 +15,18 @@ com.example.teamforge
 │   ├── controller              # ParticipantApi / ParticipantController
 │   ├── service                 # ParticipantService
 │   ├── repository              # ParticipantRepository
-│   ├── dto                     # 참여자·페이징 요청과 응답
+│   ├── dto
+│   │   ├── request             # ParticipantCreateRequest / ParticipantUpdateRequest / ParticipantPageRequest
+│   │   └── response            # ParticipantResponse / ParticipantPageResponse
 │   └── entity                  # Participant
 ├── gameprofile
 │   ├── controller              # GameProfileApi·Controller / GameProfileListApi·Controller
 │   ├── service                 # GameProfileService
 │   ├── repository              # GameProfileRepository
-│   ├── dto                     # 프로필 편집·목록 검색·페이지 요청과 응답
+│   ├── dto
+│   │   ├── request             # GameProfileRequest / GameProfileListRequest
+│   │   ├── response            # GameProfileResponse / GameProfileListResponse / GameProfilePageResponse
+│   │   └── GameProfileListRow  # 내부 JPQL 조회 결과
 │   └── entity
 │       ├── Game                # LOL / OVERWATCH enum
 │       ├── Position            # 게임 정보를 포함한 포지션 enum
@@ -31,10 +36,9 @@ com.example.teamforge
 │   ├── service                 # TeamPreviewService / TeamBalancer / MatchService
 │   ├── repository              # MatchRepository
 │   ├── dto
+│   │   ├── request             # TeamPreviewRequest / MatchCreateRequest / MatchParticipantRequest / MatchListRequest
+│   │   ├── response            # TeamPreviewResponse / MatchCreateResponse / MatchResponse / MatchPageResponse / MatchTeamResponse
 │   │   ├── TeamPreview         # 미저장 내부 편성 결과 record
-│   │   ├── TeamPreviewRequest / TeamPreviewResponse
-│   │   ├── MatchCreateRequest / MatchParticipantRequest / MatchCreateResponse
-│   │   ├── MatchListRequest / MatchPageResponse / MatchResponse / MatchTeamResponse
 │   │   ├── PreviewCandidate    # 엔티티와 분리한 계산 입력
 │   │   └── ParticipantVersions # 참여자·프로필 버전 쌍 record
 │   └── entity
@@ -182,9 +186,11 @@ MatchQueryApiTests는 두 게임·고정 정렬·페이지와 총 개수·입력
 | service | 기능 처리, 트랜잭션, repository 호출, 외부 API 결과 반영 |
 | repository | Spring Data JPA를 통한 저장·조회. 활성 참여자 조회에 Soft Delete 조건 적용 |
 | entity | JPA 매핑, 상태 변경과 모델 자체의 기본 검증 |
-| dto | 요청·응답과 서비스 처리 결과 전달 |
+| dto | request는 HTTP 요청, response는 HTTP 응답. 공통·내부 처리 타입은 dto 바로 아래 유지 |
 
 기본 흐름은 `controller → service → repository`다. Entity는 controller나 service를 참조하지 않는다. 다른 업무의 기능이 필요하면 해당 service를 호출하는 방식으로 시작하고 순환 호출은 피한다. 이를 위해 별도의 조회 인터페이스나 변환 계층을 의무적으로 만들지는 않는다.
+
+`participant`, `gameprofile`, `match`의 HTTP DTO는 동일하게 `dto.request`와 `dto.response`로 구분한다. ParticipantVersions는 요청·응답에서 함께 쓰는 버전 값, TeamPreview·PreviewCandidate는 내부 편성 처리 결과와 입력, GameProfileListRow는 JPQL 조회 결과이므로 각 도메인의 dto 바로 아래 둔다. DTO 이동 시 package·import를 함께 갱신하고, JPQL 생성자 표현식이 참조하는 타입을 이동한다면 완전한 클래스 경로도 바꿔야 한다. 이번 정리에서는 GameProfileListRow를 이동하지 않아 기존 JPQL 경로를 유지했다. 패키지 분리는 API 경로·JSON 필드·검증 규칙·DB 스키마를 변경하지 않는다.
 
 `participant`는 참여자 이름·등록·Soft Delete를, `gameprofile`은 게임 계정·점수·선호 포지션을 담당한다. GameProfileService는 참여자의 존재·활성 여부를 확인하기 위해 ParticipantRepository를 참조한다. 이 검증과 프로필 저장은 같은 트랜잭션에서 처리한다. `Game`과 `Position`은 `gameprofile.entity`에서 정의하며 match에서도 같은 enum을 사용한다. TeamPreviewService도 두 repository를 이용해 편성 데이터를 일괄 조회한다. 패키지 분리는 API 경로와 DB 테이블·컬럼·enum 저장값을 변경하지 않는다. `TeamPreview`는 내부 처리 결과로 `MatchParticipant` 목록을 담고, HTTP에는 전용 TeamPreviewResponse로 변환한다.
 

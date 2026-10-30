@@ -1,8 +1,8 @@
 package com.example.teamforge.match.controller;
 
 import com.example.teamforge.common.exception.ErrorResponse;
-import com.example.teamforge.match.dto.TeamPreviewRequest;
-import com.example.teamforge.match.dto.TeamPreviewResponse;
+import com.example.teamforge.match.dto.request.TeamPreviewRequest;
+import com.example.teamforge.match.dto.response.TeamPreviewResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;

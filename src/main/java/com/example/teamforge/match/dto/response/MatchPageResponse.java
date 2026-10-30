@@ -1,4 +1,4 @@
-package com.example.teamforge.match.dto;
+package com.example.teamforge.match.dto.response;
 
 import org.springframework.data.domain.Page;
 

@@ -2,12 +2,12 @@ package com.example.teamforge.gameprofile.service;
 
 import com.example.teamforge.common.exception.BusinessException;
 import com.example.teamforge.common.exception.ErrorCode;
-import com.example.teamforge.gameprofile.dto.GameProfileListRequest;
-import com.example.teamforge.gameprofile.dto.GameProfileListResponse;
+import com.example.teamforge.gameprofile.dto.request.GameProfileListRequest;
+import com.example.teamforge.gameprofile.dto.response.GameProfileListResponse;
 import com.example.teamforge.gameprofile.dto.GameProfileListRow;
-import com.example.teamforge.gameprofile.dto.GameProfilePageResponse;
-import com.example.teamforge.gameprofile.dto.GameProfileRequest;
-import com.example.teamforge.gameprofile.dto.GameProfileResponse;
+import com.example.teamforge.gameprofile.dto.response.GameProfilePageResponse;
+import com.example.teamforge.gameprofile.dto.request.GameProfileRequest;
+import com.example.teamforge.gameprofile.dto.response.GameProfileResponse;
 import com.example.teamforge.gameprofile.entity.Game;
 import com.example.teamforge.gameprofile.entity.GameProfile;
 import com.example.teamforge.participant.entity.Participant;

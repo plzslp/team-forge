@@ -1,11 +1,11 @@
 package com.example.teamforge.match.controller;
 
 import com.example.teamforge.common.exception.ErrorResponse;
-import com.example.teamforge.match.dto.MatchCreateRequest;
-import com.example.teamforge.match.dto.MatchCreateResponse;
-import com.example.teamforge.match.dto.MatchListRequest;
-import com.example.teamforge.match.dto.MatchPageResponse;
-import com.example.teamforge.match.dto.MatchResponse;
+import com.example.teamforge.match.dto.request.MatchCreateRequest;
+import com.example.teamforge.match.dto.response.MatchCreateResponse;
+import com.example.teamforge.match.dto.request.MatchListRequest;
+import com.example.teamforge.match.dto.response.MatchPageResponse;
+import com.example.teamforge.match.dto.response.MatchResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;

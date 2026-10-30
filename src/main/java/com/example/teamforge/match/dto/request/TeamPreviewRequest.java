@@ -1,4 +1,4 @@
-package com.example.teamforge.match.dto;
+package com.example.teamforge.match.dto.request;
 
 import com.example.teamforge.gameprofile.entity.Game;
 import io.swagger.v3.oas.annotations.media.Schema;
