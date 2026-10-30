@@ -34,6 +34,7 @@ com.example.teamforge
 │   │   ├── TeamPreview         # 미저장 내부 편성 결과 record
 │   │   ├── TeamPreviewRequest / TeamPreviewResponse
 │   │   ├── MatchCreateRequest / MatchParticipantRequest / MatchCreateResponse
+│   │   ├── MatchListRequest / MatchPageResponse / MatchResponse / MatchTeamResponse
 │   │   ├── PreviewCandidate    # 엔티티와 분리한 계산 입력
 │   │   └── ParticipantVersions # 참여자·프로필 버전 쌍 record
 │   └── entity
@@ -44,7 +45,7 @@ com.example.teamforge
     └── riot                   # 패키지 안내만 존재, 실제 연동 예정
 ```
 
-참여자·게임 프로필 API와 팀 편성 미리보기·확정 API를 구현했다. 미리보기는 계산만 수행하고, 확정은 최신 DB 정보를 잠금·검증한 뒤 스냅샷을 저장한다. 내전 기록 조회·경기 결과 API와 Riot 통신은 아직 없다.
+참여자·게임 프로필 API와 팀 편성 미리보기·확정·기록 조회 API를 구현했다. 미리보기는 계산만 수행하고, 확정은 최신 DB 정보를 잠금·검증한 뒤 스냅샷을 저장한다. 기록 조회는 그 스냅샷을 사용한다. 경기 결과 입력·수정 API와 Riot 통신은 아직 없다.
 
 ### 참여자 API
 
@@ -131,7 +132,7 @@ TeamPreviewApi는 Swagger 문서, TeamPreviewController는 HTTP 매핑·바인�
 
 이름·점수·생성 시각은 요청 계약에 없으며 서버의 현재 DB 정보와 시각으로 결정한다. 수동 점수가 null이 아니면 0도 우선 적용한다. Match와 MatchParticipant에는 확정 당시 이름·적용 점수·배정 포지션·팀이 저장되고, 이후 원본 정보 수정이나 논리 삭제로 과거 기록이 바뀌지 않는다. 경기 결과는 미입력(null)으로 생성한다.
 
-성공 응답은 201과 id·game·createdAt·teams·scoreDifference다. teams는 A/B 각각 participants와 totalScore를 담으며 참가자는 participantId·name·score·assignedPosition을 포함한다. 합계·차이는 long이다. 아직 조회 API를 제공하지 않으므로 이번 생성 응답에는 Location 헤더를 설정하지 않는다. 동일 POST를 반복하면 새 경기로 생성하며 요청 중복 방지 키는 지원하지 않는다.
+성공 응답은 201과 id·game·createdAt·teams·scoreDifference, 상세 조회 Location(`/api/matches/{id}`)이다. teams는 A/B 각각 participants와 totalScore를 담으며 참가자는 participantId·name·score·assignedPosition을 포함한다. 합계·차이는 long이다. 동일 POST를 반복하면 새 경기로 생성하며 요청 중복 방지 키는 지원하지 않는다.
 
 | 상태 | 대표 오류 |
 | --- | --- |
@@ -151,6 +152,27 @@ TeamPreviewApi는 Swagger 문서, TeamPreviewController는 HTTP 매핑·바인�
 MatchCreateApiTests는 실제 미리보기 → 확정 저장, 롤·오버워치, 수동 교체, 원본 변경 후 기록 보존, 버전·활성 상태·역할·허용 정책과 중첩 입력 검증을 확인한다. MatchConfirmationConcurrencyTests는 독립적으로 커밋되는 두 H2 트랜잭션으로 수정 선행과 확정 선행 양쪽의 잠금 동작을 확인한다. 운영 PostgreSQL에서의 잠금 동작 검증은 환경 구성 후 별도로 수행해야 한다.
 
 2026-10-30 검증: 확정 API 43건·동시성 8건·공통 잠금 오류 응답 추가 2건을 포함한 전체 227건과 `test bootJar`를 통과했다.
+
+### 경기 기록 목록·상세 조회 API
+
+| 메서드 | 경로 | 동작 |
+| --- | --- | --- |
+| GET | `/api/matches?game=LOL&page=0&size=20` | 게임별 기록을 생성 시각·ID 내림차순으로 페이징 조회, 200 |
+| GET | `/api/matches/{id}` | 저장된 팀 스냅샷과 경기 결과 상세 조회, 200. 경기 없음 404 |
+
+목록의 game은 필수(`LOL`·`OVERWATCH`)다. page는 0부터 시작하며 기본값 0, size는 기본값 20·허용 범위 1~100이다. 기본값은 생략한 경우에만 적용하며 빈 값·숫자 형식 오류·범위 위반·int 범위를 넘는 offset은 400 / INVALID_REQUEST다. sort를 전달해도 고정 정렬을 유지한다. 마지막 페이지 이후는 빈 content와 게임별 실제 totalElements·totalPages를 반환한다.
+
+목록 응답은 content·page·size·totalElements·totalPages다. content 각 항목과 상세 응답은 같은 MatchResponse 계약으로 id·game·createdAt·teams·scoreDifference·result를 담는다. A/B 순서와 팀 내부의 포지션·참가자 ID 오름차순을 고정한다. 팀 구성은 MatchParticipant에 저장된 스냅샷에서 읽으며 현재 Participant/GameProfile을 조인하거나 Soft Delete로 제외하지 않는다. 이름·점수·선호 포지션 변경이나 참가자 삭제 후에도 당시 기록을 유지한다.
+
+result는 미입력이면 null이다. 입력돼 있으면 scoreA·scoreB·memo·outcomeA·outcomeB를 반환한다. 각 팀의 outcome은 WIN·LOSS·DRAW이고, 0:0을 포함해 동점이면 DRAW다. 경기 스코어와 팀원 실력 점수 합계는 다른 값이며, totalScore·scoreDifference는 확정 당시 실력 점수로 계산한다. 결과 입력 API는 후속 작업이지만 이미 저장된 결과는 조회한다.
+
+MatchService의 조회는 읽기 전용 트랜잭션으로 수행한다. 목록은 먼저 경기 ID를 DB 페이징한 뒤 해당 페이지의 참가자 스냅샷을 fetch join으로 일괄 로딩한다. ID 페이지의 순서대로 DTO를 만들어 일괄 조회 결과의 순서에 의존하지 않는다. 컬렉션 fetch join 쿼리에 Pageable을 직접 적용하지 않아 중복·메모리 페이징을 피한다. 총 개수 조회가 필요한 일반 페이지는 ID·count·스냅샷 3개 쿼리로 처리하며, 상세는 경기·스냅샷 1개 쿼리다.
+
+생성과 조회는 MatchTeamResponse를 공유한다. 기존 생성 응답의 JSON 필드는 유지하고, 내부 팀 DTO의 OpenAPI 스키마 이름은 MatchTeamResponse로 정리했다. 상세 조회 경로가 구현되어 생성 응답에 Location을 추가했다. MatchApi는 Swagger 계약, MatchController는 HTTP 매핑·바인딩·검증·ResponseEntity를 담당한다. 잘못된 상세 UUID는 400 / INVALID_REQUEST, 존재하지 않는 경기는 404 / RESOURCE_NOT_FOUND다.
+
+MatchQueryApiTests는 두 게임·고정 정렬·페이지와 총 개수·입력 오류·결과 미입력과 승패/무승부·원본 변경/삭제 후 과거 기록·생성 Location·Swagger 계약을 검증한다. 목록 5경기·50명에서 SQL 3개, 상세에서 SQL 1개도 확인한다. 기존 저장 스키마·편성 알고리즘·확정 잠금 정책은 변경하지 않았다.
+
+2026-10-30 조회 검증: MatchQueryApiTests 29건과 전체 256건(실패·오류·스킵 0), `test bootJar`를 통과했다.
 
 ## 계층별 책임
 
@@ -213,7 +235,7 @@ Spring Modulith core/JPA/runtime/test와 BOM을 제거했다. 사용하지 않�
 ## 남은 구현과 주의점
 
 1. PostgreSQL 운영 연결과 환경별 설정을 확정한다. 이후 스키마 변경은 후속 Flyway 마이그레이션으로 관리한다.
-2. 미리보기와 확정 저장은 구현했다. 편성 기록 목록·상세 조회를 구현한다.
+2. 미리보기·확정 저장·기록 목록 및 상세 조회는 구현했다.
 3. 경기 결과 입력·수정과 참가자 최근 내전 조회를 구현한다.
 4. Riot API를 실제로 연동한다.
 5. 백엔드 계약 완성 후 참여자·프로필·미리보기·내전 기록 API를 프론트에 연결한다. 페이지 이동과 페이지 간 참여자 선택 유지도 구현한다.
