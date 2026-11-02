@@ -301,7 +301,14 @@ class MatchQueryApiTests {
                 .andExpect(jsonPath("$.paths['/api/matches'].get.parameters[?(@.name == 'game')].required", contains(true)))
                 .andExpect(jsonPath("$.paths['/api/matches'].get.parameters[?(@.name == 'page')].schema.default", contains(0)))
                 .andExpect(jsonPath("$.paths['/api/matches'].get.parameters[?(@.name == 'size')].schema.default", contains(20)))
-                .andExpect(jsonPath("$.components.schemas.MatchResponse.properties.result").exists());
+                .andExpect(jsonPath("$.components.schemas.MatchResponse.properties.result").exists())
+                .andExpect(jsonPath("$.components.schemas.MatchTeamResponse.properties.participants.items['$ref']")
+                        .value("#/components/schemas/MatchMemberResponse"))
+                .andExpect(jsonPath("$.components.schemas.MatchMemberResponse.properties.participantId").exists())
+                .andExpect(jsonPath("$.components.schemas.MatchMemberResponse.properties.preferredPosition").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.TeamResponse.properties.participants.items['$ref']")
+                        .value("#/components/schemas/MemberResponse"))
+                .andExpect(jsonPath("$.components.schemas.MemberResponse.properties.preferredPosition").exists());
     }
 
     private UUID persistMatch(long number, Game game, Instant createdAt, MatchResult result) {
