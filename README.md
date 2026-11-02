@@ -47,7 +47,9 @@ npm.cmd run dev -- --port 5173 --strictPort
 
 팀 편성 미리보기는 `POST /api/team-previews`에 game과 중복 없는 participantIds 10개를 전달합니다. 선호 포지션을 우선 충족하고 팀 점수 차이를 최소화한 5:5 결과와 변경 감지 버전을 반환하며 저장하지 않습니다. 롤은 각 포지션 1명, 오버워치는 탱커 1·딜러 2·서포터 2명입니다. 선호 편성이 불가능하면 409를 반환하고, `allowNonPreferredPositions: true`를 명시하면 비선호 배정 수를 최소화한 결과와 경고를 반환합니다.
 
-팀 편성 확정은 `POST /api/matches`에 game, 최종 participants 10명(participantId·team·assignedPosition), 미리보기의 participantVersions와 비선호 허용 여부를 전달합니다. 서버가 최신 이름·점수·버전과 역할 구성을 검증하고 스냅샷을 저장한 뒤 201과 경기 ID·시각·팀 정보를 반환합니다. 정보 변경·삭제 후 확정은 409로 거절하며 참가자·프로필 잠금으로 검증과 저장 사이의 동시 변경을 막습니다. 같은 요청을 반복하면 별도 경기가 생성됩니다. 기록 목록·상세 조회·경기 결과 → Riot 연동 → 프론트 통합 순서로 후속 작업을 진행합니다.
+팀 편성 확정은 `POST /api/matches`에 game, 최종 participants 10명(participantId·team·assignedPosition), 미리보기의 participantVersions와 비선호 허용 여부를 전달합니다. 서버가 최신 이름·점수·버전과 역할 구성을 검증하고 스냅샷을 저장한 뒤 201과 경기 ID·시각·팀 정보, 상세 조회 Location을 반환합니다. 정보 변경·삭제 후 확정은 409로 거절하며 참가자·프로필 잠금으로 검증과 저장 사이의 동시 변경을 막습니다. 같은 요청을 반복하면 별도 경기가 생성됩니다.
+
+경기 기록은 `GET /api/matches?game=LOL&page=0&size=20`과 `GET /api/matches/{id}`로 조회합니다. 목록의 game은 필수이며 생성 시각·ID 내림차순으로 고정하고, 페이지 크기는 1~100입니다. 두 조회 모두 확정 당시 스냅샷과 경기 결과를 제공하므로 참가자를 수정·삭제해도 과거 기록은 유지됩니다. 결과 미입력은 null, 입력된 0:0은 무승부입니다. 경기 결과 입력·수정·참가자 최근 내전 조회 → Riot 연동 → 프론트 통합 순서로 후속 작업을 진행합니다.
 
 API 문서는 [Swagger UI](http://127.0.0.1:8080/swagger-ui.html)에서 확인할 수 있습니다.
 

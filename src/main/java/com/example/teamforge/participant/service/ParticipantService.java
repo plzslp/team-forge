@@ -2,8 +2,8 @@ package com.example.teamforge.participant.service;
 
 import com.example.teamforge.common.exception.BusinessException;
 import com.example.teamforge.common.exception.ErrorCode;
-import com.example.teamforge.participant.dto.ParticipantResponse;
-import com.example.teamforge.participant.dto.ParticipantPageResponse;
+import com.example.teamforge.participant.dto.response.ParticipantResponse;
+import com.example.teamforge.participant.dto.response.ParticipantPageResponse;
 import com.example.teamforge.participant.entity.Participant;
 import com.example.teamforge.participant.repository.ParticipantRepository;
 import lombok.RequiredArgsConstructor;

@@ -1,4 +1,4 @@
-package com.example.teamforge.gameprofile.dto;
+package com.example.teamforge.gameprofile.dto.response;
 
 import org.springframework.data.domain.Page;
 

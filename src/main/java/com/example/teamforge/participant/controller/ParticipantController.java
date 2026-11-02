@@ -1,11 +1,11 @@
 package com.example.teamforge.participant.controller;
 
 import com.example.teamforge.participant.service.ParticipantService;
-import com.example.teamforge.participant.dto.ParticipantCreateRequest;
-import com.example.teamforge.participant.dto.ParticipantPageRequest;
-import com.example.teamforge.participant.dto.ParticipantResponse;
-import com.example.teamforge.participant.dto.ParticipantPageResponse;
-import com.example.teamforge.participant.dto.ParticipantUpdateRequest;
+import com.example.teamforge.participant.dto.request.ParticipantCreateRequest;
+import com.example.teamforge.participant.dto.request.ParticipantPageRequest;
+import com.example.teamforge.participant.dto.response.ParticipantResponse;
+import com.example.teamforge.participant.dto.response.ParticipantPageResponse;
+import com.example.teamforge.participant.dto.request.ParticipantUpdateRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;

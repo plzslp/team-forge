@@ -1,7 +1,7 @@
 package com.example.teamforge.match.controller;
 
-import com.example.teamforge.match.dto.TeamPreviewRequest;
-import com.example.teamforge.match.dto.TeamPreviewResponse;
+import com.example.teamforge.match.dto.request.TeamPreviewRequest;
+import com.example.teamforge.match.dto.response.TeamPreviewResponse;
 import com.example.teamforge.match.service.TeamPreviewService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

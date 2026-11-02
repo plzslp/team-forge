@@ -1,7 +1,10 @@
-package com.example.teamforge.match.dto;
+package com.example.teamforge.match.dto.response;
 
 import com.example.teamforge.gameprofile.entity.Game;
 import com.example.teamforge.gameprofile.entity.Position;
+import com.example.teamforge.match.dto.ParticipantVersions;
+import com.example.teamforge.match.dto.PreviewCandidate;
+import com.example.teamforge.match.dto.TeamPreview;
 import com.example.teamforge.match.entity.MatchParticipant;
 
 import java.util.List;
