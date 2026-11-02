@@ -5,6 +5,7 @@ import com.example.teamforge.common.exception.ErrorCode;
 import com.example.teamforge.gameprofile.entity.GameProfile;
 import com.example.teamforge.gameprofile.repository.GameProfileRepository;
 import com.example.teamforge.match.dto.request.MatchCreateRequest;
+import com.example.teamforge.match.dto.request.MatchResultRequest;
 import com.example.teamforge.match.dto.response.MatchCreateResponse;
 import com.example.teamforge.match.dto.request.MatchParticipantRequest;
 import com.example.teamforge.match.dto.request.MatchListRequest;
@@ -12,6 +13,7 @@ import com.example.teamforge.match.dto.response.MatchPageResponse;
 import com.example.teamforge.match.dto.response.MatchResponse;
 import com.example.teamforge.match.dto.ParticipantVersions;
 import com.example.teamforge.match.entity.Match;
+import com.example.teamforge.match.entity.MatchResult;
 import com.example.teamforge.match.entity.MatchParticipant;
 import com.example.teamforge.match.repository.MatchRepository;
 import com.example.teamforge.participant.entity.Participant;
@@ -38,6 +40,16 @@ public class MatchService {
     private final ParticipantRepository participantRepository;
     private final GameProfileRepository gameProfileRepository;
     private final MatchRepository matchRepository;
+
+    @Transactional
+    public MatchResponse recordResult(UUID id, MatchResultRequest request) {
+        Match match = matchRepository.findWithParticipantsById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        match.recordResult(new MatchResult(request.scoreA(), request.scoreB(), request.memo()));
+        // 응답을 만들기 전에 버전 충돌을 확인한다. 변경이 없으면 UPDATE 없이 성공한다.
+        matchRepository.flush();
+        return MatchResponse.from(match);
+    }
 
     /** 페이지 순서는 ID 조회 결과로 유지하고, 페이지의 참가자 스냅샷은 한 번에 로딩한다. */
     @Transactional(readOnly = true)

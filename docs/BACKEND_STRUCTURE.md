@@ -36,7 +36,7 @@ com.example.teamforge
 │   ├── service                 # TeamPreviewService / TeamBalancer / MatchService
 │   ├── repository              # MatchRepository
 │   ├── dto
-│   │   ├── request             # TeamPreviewRequest / MatchCreateRequest / MatchParticipantRequest / MatchListRequest
+│   │   ├── request             # TeamPreviewRequest / MatchCreateRequest / MatchParticipantRequest / MatchListRequest / MatchResultRequest
 │   │   ├── response            # TeamPreviewResponse / MatchCreateResponse / MatchResponse / MatchPageResponse / MatchTeamResponse
 │   │   ├── TeamPreview         # 미저장 내부 편성 결과 record
 │   │   ├── PreviewCandidate    # 엔티티와 분리한 계산 입력
@@ -49,7 +49,7 @@ com.example.teamforge
     └── riot                   # 패키지 안내만 존재, 실제 연동 예정
 ```
 
-참여자·게임 프로필 API와 팀 편성 미리보기·확정·기록 조회 API를 구현했다. 미리보기는 계산만 수행하고, 확정은 최신 DB 정보를 잠금·검증한 뒤 스냅샷을 저장한다. 기록 조회는 그 스냅샷을 사용한다. 경기 결과 입력·수정 API와 Riot 통신은 아직 없다.
+참여자·게임 프로필 API와 팀 편성 미리보기·확정·기록 조회·결과 입력 및 수정 API를 구현했다. 미리보기는 계산만 수행하고, 확정은 최신 DB 정보를 잠금·검증한 뒤 스냅샷을 저장한다. 기록 조회는 그 스냅샷을 사용한다. Riot 통신은 아직 없다.
 
 ### 참여자 API
 
@@ -168,7 +168,7 @@ MatchCreateApiTests는 실제 미리보기 → 확정 저장, 롤·오버워치,
 
 목록 응답은 content·page·size·totalElements·totalPages다. content 각 항목과 상세 응답은 같은 MatchResponse 계약으로 id·game·createdAt·teams·scoreDifference·result를 담는다. A/B 순서와 팀 내부의 포지션·참가자 ID 오름차순을 고정한다. 팀 구성은 MatchParticipant에 저장된 스냅샷에서 읽으며 현재 Participant/GameProfile을 조인하거나 Soft Delete로 제외하지 않는다. 이름·점수·선호 포지션 변경이나 참가자 삭제 후에도 당시 기록을 유지한다.
 
-result는 미입력이면 null이다. 입력돼 있으면 scoreA·scoreB·memo·outcomeA·outcomeB를 반환한다. 각 팀의 outcome은 WIN·LOSS·DRAW이고, 0:0을 포함해 동점이면 DRAW다. 경기 스코어와 팀원 실력 점수 합계는 다른 값이며, totalScore·scoreDifference는 확정 당시 실력 점수로 계산한다. 결과 입력 API는 후속 작업이지만 이미 저장된 결과는 조회한다.
+result는 미입력이면 null이다. 입력돼 있으면 scoreA·scoreB·memo·outcomeA·outcomeB를 반환한다. 각 팀의 outcome은 WIN·LOSS·DRAW이고, 0:0을 포함해 동점이면 DRAW다. 경기 스코어와 팀원 실력 점수 합계는 다른 값이며, totalScore·scoreDifference는 확정 당시 실력 점수로 계산한다.
 
 MatchService의 조회는 읽기 전용 트랜잭션으로 수행한다. 목록은 먼저 경기 ID를 DB 페이징한 뒤 해당 페이지의 참가자 스냅샷을 fetch join으로 일괄 로딩한다. ID 페이지의 순서대로 DTO를 만들어 일괄 조회 결과의 순서에 의존하지 않는다. 컬렉션 fetch join 쿼리에 Pageable을 직접 적용하지 않아 중복·메모리 페이징을 피한다. 총 개수 조회가 필요한 일반 페이지는 ID·count·스냅샷 3개 쿼리로 처리하며, 상세는 경기·스냅샷 1개 쿼리다.
 
@@ -177,6 +177,18 @@ MatchService의 조회는 읽기 전용 트랜잭션으로 수행한다. 목록�
 MatchQueryApiTests는 두 게임·고정 정렬·페이지와 총 개수·입력 오류·결과 미입력과 승패/무승부·원본 변경/삭제 후 과거 기록·생성 Location·Swagger 계약을 검증한다. 목록 5경기·50명에서 SQL 3개, 상세에서 SQL 1개도 확인한다. 기존 저장 스키마·편성 알고리즘·확정 잠금 정책은 변경하지 않았다.
 
 2026-10-30 조회 검증: MatchQueryApiTests 29건과 전체 256건(실패·오류·스킵 0), `test bootJar`를 통과했다.
+
+### 경기 결과 입력·수정 API
+
+`PUT /api/matches/{id}/result`는 최초 결과 입력과 기존 결과 전체 교체를 처리한다. 요청 예시는 `{"scoreA":2,"scoreB":1,"memo":"첫 경기"}`다. scoreA·scoreB는 필수이며 0~2147483647의 정수다. memo는 최대 2000자이며 생략·null은 빈 문자열로 저장한다. 결과 미입력(null)과 입력된 0:0 무승부는 구분하며, 결과 삭제·초기화 API는 제공하지 않는다.
+
+성공 시 200과 갱신된 MatchResponse를 반환한다. 목록·상세 조회에서도 저장된 결과를 확인할 수 있다. 점수·승패·메모만 변경하며 경기 생성 시각·팀 구성·확정 당시 이름·실력 점수·역할은 유지한다. 원본 참가자가 삭제돼도 결과 입력·수정은 가능하다. 잘못된 UUID·필수 스코어 누락·입력 범위 위반은 400 / INVALID_REQUEST, 경기 없음은 404 / RESOURCE_NOT_FOUND다.
+
+MatchService는 쓰기 트랜잭션에서 경기와 스냅샷을 조회하고 기존 Match.recordResult()·MatchResult를 사용한다. 변경 감지 후 명시적으로 flush해 기존 Match의 @Version 충돌을 409 / CONCURRENT_MODIFICATION으로 전달한다. 변경 내용이 동일해 UPDATE가 필요하지 않으면 성공한다. 클라이언트 버전 비교는 하지 않는다. 동일 버전을 읽고 서로 다른 결과를 쓰는 트랜잭션이 겹치면 충돌하지만, 이전 수정이 완료된 뒤 조회한 요청은 결과를 덮어쓴다. 오래 열어 둔 화면의 덮어쓰기까지 방지하는 정책은 현재 제공하지 않는다.
+
+MatchResultApiTests는 두 게임의 최초 입력·교체·반복 요청, 목록·상세 반영, 0:0 무승부·승패, 메모 초기화·길이 경계, 입력 오류·미존재 경기·삭제 참가자와 Swagger 계약을 검증한다. MatchResultConcurrencyTests는 먼저 연 트랜잭션이 이전 버전을 유지하는 동안 독립 REQUIRES_NEW 트랜잭션이 결과를 커밋한 뒤, 이전 버전의 HTTP 요청이 409로 거절되고 먼저 커밋된 결과가 유지되는지 검증한다. H2에서 실제 커밋·롤백을 사용하며 PostgreSQL 검증은 별도다. 기존 DB 스키마·편성 알고리즘·확정 잠금 방식은 변경하지 않는다.
+
+2026-11-02 결과 API 검증: API 20건·동시성 2건을 추가했으며 전체 278건(실패·오류·스킵 0)과 `test bootJar`를 통과했다.
 
 ## 계층별 책임
 
@@ -242,7 +254,7 @@ Spring Modulith core/JPA/runtime/test와 BOM을 제거했다. 사용하지 않�
 
 1. PostgreSQL 운영 연결과 환경별 설정을 확정한다. 이후 스키마 변경은 후속 Flyway 마이그레이션으로 관리한다.
 2. 미리보기·확정 저장·기록 목록 및 상세 조회는 구현했다.
-3. 경기 결과 입력·수정과 참가자 최근 내전 조회를 구현한다.
+3. 경기 결과 입력·수정은 구현했다. 참가자 최근 내전 조회를 구현한다.
 4. Riot API를 실제로 연동한다.
 5. 백엔드 계약 완성 후 참여자·프로필·미리보기·내전 기록 API를 프론트에 연결한다. 페이지 이동과 페이지 간 참여자 선택 유지도 구현한다.
 
