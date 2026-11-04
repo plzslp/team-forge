@@ -109,7 +109,9 @@ class MatchResultApiTests {
     @ValueSource(strings = {"{}", "null", "", "{", "{\"scoreA\":0}", "{\"scoreB\":0}",
             "{\"scoreA\":null,\"scoreB\":0}", "{\"scoreA\":0,\"scoreB\":null}",
             "{\"scoreA\":-1,\"scoreB\":0}", "{\"scoreA\":0,\"scoreB\":-1}",
-            "{\"scoreA\":2147483648,\"scoreB\":0}", "{\"scoreA\":\"bad\",\"scoreB\":0}"})
+            "{\"scoreA\":2147483648,\"scoreB\":0}", "{\"scoreA\":\"bad\",\"scoreB\":0}",
+            "{\"scoreA\":1.9,\"scoreB\":0}", "{\"scoreA\":0,\"scoreB\":-0.5}",
+            "{\"scoreA\":\"1\",\"scoreB\":0}"})
     void rejectsInvalidInputWithoutRecordingResult(String body) throws Exception {
         // given
         UUID id = persistMatch(Game.LOL);
