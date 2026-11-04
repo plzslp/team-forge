@@ -1,5 +1,8 @@
 package com.example.teamforge.participant.controller;
 
+import com.example.teamforge.match.dto.request.ParticipantMatchListRequest;
+import com.example.teamforge.match.dto.response.ParticipantMatchPageResponse;
+import com.example.teamforge.match.service.MatchService;
 import com.example.teamforge.participant.service.ParticipantService;
 import com.example.teamforge.participant.dto.request.ParticipantCreateRequest;
 import com.example.teamforge.participant.dto.request.ParticipantPageRequest;
@@ -29,6 +32,14 @@ import java.util.UUID;
 public class ParticipantController extends ParticipantApi {
 
     private final ParticipantService participantService;
+    private final MatchService matchService;
+
+    @Override
+    @GetMapping(value = "/{id}/matches", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<ParticipantMatchPageResponse> findMatches(@PathVariable("id") UUID id,
+                                                                    @Valid @ModelAttribute ParticipantMatchListRequest request) {
+        return ResponseEntity.ok(matchService.findParticipantMatches(id, request));
+    }
 
     @Override
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)

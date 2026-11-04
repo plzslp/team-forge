@@ -1,5 +1,7 @@
 package com.example.teamforge.match.service;
 
+import com.example.teamforge.match.dto.request.ParticipantMatchListRequest;
+import com.example.teamforge.match.dto.response.ParticipantMatchPageResponse;
 import com.example.teamforge.common.exception.BusinessException;
 import com.example.teamforge.common.exception.ErrorCode;
 import com.example.teamforge.gameprofile.entity.GameProfile;
@@ -40,6 +42,17 @@ public class MatchService {
     private final ParticipantRepository participantRepository;
     private final GameProfileRepository gameProfileRepository;
     private final MatchRepository matchRepository;
+
+    @Transactional(readOnly = true)
+    public ParticipantMatchPageResponse findParticipantMatches(UUID participantId, ParticipantMatchListRequest request) {
+        if ((long) request.getPage() * request.getSize() > Integer.MAX_VALUE) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST);
+        }
+        participantRepository.findByIdAndDeletedAtIsNull(participantId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        return ParticipantMatchPageResponse.from(matchRepository.findParticipantMatches(
+                participantId, request.getGame(), PageRequest.of(request.getPage(), request.getSize())));
+    }
 
     @Transactional
     public MatchResponse recordResult(UUID id, MatchResultRequest request) {
