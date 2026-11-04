@@ -1,6 +1,8 @@
 package com.example.teamforge.participant.controller;
 
 import com.example.teamforge.common.exception.ErrorResponse;
+import com.example.teamforge.match.dto.request.ParticipantMatchListRequest;
+import com.example.teamforge.match.dto.response.ParticipantMatchPageResponse;
 import com.example.teamforge.participant.dto.request.ParticipantCreateRequest;
 import com.example.teamforge.participant.dto.request.ParticipantPageRequest;
 import com.example.teamforge.participant.dto.response.ParticipantResponse;
@@ -21,6 +23,20 @@ import java.util.UUID;
 /** 참여자 API의 메서드 선언과 Swagger 문서를 정의한다. HTTP 매핑과 입력 검증은 Controller에서 처리한다. */
 @Tag(name = "Participants", description = "참여자 관리 API")
 public abstract class ParticipantApi {
+
+    @Operation(summary = "참여자 최근 내전 조회", description = "게임별 확정 기록을 생성 시각·ID 내림차순으로 조회합니다. "
+            + "참여자 소속 팀 기준으로 승패를 반환하며 미입력 스코어와 결과는 null입니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "경기 기록과 페이지 정보"),
+            @ApiResponse(responseCode = "400", description = "잘못된 UUID, 게임 또는 페이징 값",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "참여자가 없거나 삭제됨",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public abstract ResponseEntity<ParticipantMatchPageResponse> findMatches(
+            UUID id, @ParameterObject ParticipantMatchListRequest request);
 
     @Operation(summary = "참여자 등록", description = "앞뒤 공백을 제거한 1~20자 이름으로 참여자를 등록합니다.")
     @ApiResponses({
