@@ -1,325 +1,40 @@
 # 백엔드 구조
 
-## 아키텍처 결정
+TeamForge 백엔드는 Java 17과 Spring Boot를 사용하는 단일 Gradle 프로젝트입니다. HTTP 요청은 Controller → Service → Repository 순으로 처리하고, Service에서 트랜잭션을 관리합니다. 각 도메인의 `Api` 추상 클래스에 Swagger 계약을, `dto/request`와 `dto/response`에 요청·응답 모델을 둡니다.
 
-단일 Gradle 프로젝트 안에서 **업무별 패키지 + 레이어드 아키텍처**를 사용한다. `participant`, `gameprofile`, `match`는 업무를 구분하는 일반 패키지이며 각 내부에 `controller`, `service`, `repository`, `entity`, `dto`를 둔다. 2026-10-08에 게임 프로필 기능을 `participant`에서 `gameprofile`로 분리했다.
-
-엄격한 DDD 모듈 경계와 Spring Modulith는 사용하지 않는다. 사용처·구현체가 없던 `ParticipantLookup`, `ParticipantSnapshot`과 Modulith 전용 경계 테스트를 제거했다. JPA 모델에 구현된 점수 보정, Soft Delete, 경기 기록 검증은 유지한다.
-
-## 패키지 구조와 현재 구현
-
-```text
-com.example.teamforge
-├── TeamForgeApplication
-├── participant
-│   ├── controller              # ParticipantApi / ParticipantController
-│   ├── service                 # ParticipantService
-│   ├── repository              # ParticipantRepository
-│   ├── dto
-│   │   ├── request             # ParticipantCreateRequest / ParticipantUpdateRequest / ParticipantPageRequest
-│   │   └── response            # ParticipantResponse / ParticipantPageResponse
-│   └── entity                  # Participant
-├── gameprofile
-│   ├── controller              # GameProfileApi·Controller / GameProfileListApi·Controller
-│   ├── service                 # GameProfileService
-│   ├── repository              # GameProfileRepository
-│   ├── dto
-│   │   ├── request             # GameProfileRequest / GameProfileListRequest
-│   │   ├── response            # GameProfileResponse / GameProfileListResponse / GameProfilePageResponse
-│   │   └── GameProfileListRow  # 내부 JPQL 조회 결과
-│   └── entity
-│       ├── Game                # LOL / OVERWATCH enum
-│       ├── Position            # 게임 정보를 포함한 포지션 enum
-│       └── GameProfile
-├── match
-│   ├── controller              # TeamPreviewApi·Controller / MatchApi·Controller
-│   ├── service                 # TeamPreviewService / TeamBalancer / MatchService
-│   ├── repository              # MatchRepository
-│   ├── dto
-│   │   ├── request             # TeamPreviewRequest / MatchCreateRequest / MatchParticipantRequest / MatchListRequest
-│   │   ├── response            # TeamPreviewResponse / MatchCreateResponse / MatchResponse / MatchPageResponse / MatchTeamResponse
-│   │   ├── TeamPreview         # 미저장 내부 편성 결과 record
-│   │   ├── PreviewCandidate    # 엔티티와 분리한 계산 입력
-│   │   └── ParticipantVersions # 참여자·프로필 버전 쌍 record
-│   └── entity
-│       ├── Match
-│       ├── MatchParticipant
-│       └── MatchResult         # Embeddable
-└── external
-    └── riot                   # 패키지 안내만 존재, 실제 연동 예정
-```
-
-참여자·게임 프로필 API와 팀 편성 미리보기·확정·기록 조회 API를 구현했다. 미리보기는 계산만 수행하고, 확정은 최신 DB 정보를 잠금·검증한 뒤 스냅샷을 저장한다. 기록 조회는 그 스냅샷을 사용한다. 경기 결과 입력·수정 API와 Riot 통신은 아직 없다.
-
-### 참여자 API
-
-| 메서드 | 경로 | 동작 |
-|---|---|---|
-| POST | `/api/participants` | 이름으로 등록, 201과 상세 조회 Location 반환 |
-| GET | `/api/participants?page=0&size=20` | 활성 참여자 페이징 조회, 이름·ID 오름차순 고정 |
-| GET | `/api/participants/{id}` | 활성 참여자 상세 조회, 없거나 삭제됐으면 404 |
-| PATCH | `/api/participants/{id}` | 이름 수정, 수정된 ID·이름 반환. 없으면 404, 삭제됐으면 409 |
-| DELETE | `/api/participants/{id}` | Soft Delete, 204 반환. 반복 삭제도 204, 없으면 404 |
-
-등록 요청은 `{"name":"참여자"}`, 응답은 `{"id":"UUID","name":"참여자"}`다. 이름은 `strip()`으로 앞뒤 공백을 제거한 뒤 공백이 아닌 1~20자인지 검증한다. 요청 DTO는 Bean Validation, 엔티티는 기존 업무 검증을 사용한다. HTTP 입력 오류는 공통 400 / INVALID_REQUEST 응답을 반환한다.
-
-수정 요청도 `{"name":"새 이름"}` 형태이며 등록과 동일한 이름 검증을 적용한다. 삭제는 `deletedAt`만 설정하며 참여자 행·게임 프로필·기존 경기 스냅샷을 유지한다. 반복 삭제 시 최초 삭제 시각을 유지한다.
-
-ParticipantService의 조회는 읽기 전용 트랜잭션, 등록·수정·삭제는 쓰기 트랜잭션으로 실행한다. 수정·삭제는 관리 상태의 엔티티를 변경하고 JPA 변경 감지로 저장한다. 공개 조회는 repository의 `deletedAt IS NULL` 조건을 사용하고 JPA 엔티티 대신 응답 DTO를 반환한다. 동명이인 등록은 허용한다. 참여자 API 응답에는 게임 프로필을 포함하지 않으며 별도 프로필 API로 조회한다.
-
-목록은 Spring Data JPA의 PageRequest와 Page를 사용하되 외부 응답은 ParticipantPageResponse로 고정한다. ParticipantPageRequest를 `@ModelAttribute`로 바인딩하고 `@Valid`로 입력을 검증한다. page는 0부터 시작하며 기본값 0, size는 기본값 20과 허용 범위 1~100을 사용한다. 기본값은 파라미터를 생략한 경우에만 적용하며, `page=`·`size=` 또는 공백만 있는 값은 거절한다. 음수 page, 범위 밖 size, 숫자가 아닌 입력, int 범위를 넘는 조회 offset(page × size)은 400 / INVALID_REQUEST를 반환한다. Service는 조회 offset을 포함한 범위 검증을 유지한다. sort 파라미터는 지원하지 않으며 전달해도 이름·ID 오름차순을 유지한다.
-
-```json
-{
-  "content": [{"id": "UUID", "name": "참여자"}],
-  "page": 0,
-  "size": 20,
-  "totalElements": 1,
-  "totalPages": 1
-}
-```
-
-참여자가 없거나 마지막 페이지 이후를 요청하면 content는 빈 배열이다. totalElements와 totalPages에는 삭제되지 않은 참여자 전체 기준의 값을 반환한다. 기존 배열 응답에서 페이지 객체로 바뀌었으므로 프론트 연결 시 content를 읽고 페이지 간 선택된 참여자를 유지해야 한다. 게임·이름·포지션 검색에는 아래 게임 프로필 목록 API를 사용한다. 화면의 페이지 이동은 후속 작업이다.
-
-ParticipantController는 ParticipantApi 추상 클래스를 상속한다. ParticipantApi는 메서드 선언과 Swagger 문서 어노테이션(`@Tag`, `@Operation`, `@ApiResponses`, `@ParameterObject`)을 정의한다. Controller는 HTTP 매핑(`@RequestMapping`, `@GetMapping`, `@PostMapping`, `@PatchMapping`, `@DeleteMapping`), 요청 바인딩(`@PathVariable`, `@RequestBody`, `@ModelAttribute`), 검증 실행(`@Valid`), 서비스 호출과 HTTP 응답을 담당한다. DTO는 Bean Validation 제약과 필드의 Swagger 스키마를 정의한다. 같은 매핑·바인딩·검증 어노테이션을 Api와 Controller에 중복 작성하지 않는다. springdoc-openapi 3.1.1을 사용하며 `/swagger-ui.html`과 `/v3/api-docs`에서 확인한다. ParticipantApiTests는 실제 DB 저장·조회, 입력 검증, 삭제된 참여자 제외와 상위 클래스의 OpenAPI 문서 반영을 검증한다.
-
-### 게임 프로필 API
-
-| 메서드 | 경로 | 동작 |
-| --- | --- | --- |
-| PUT | `/api/participants/{participantId}/profiles/{game}` | 신규 등록 201 + Location, 기존 프로필 전체 수정 200 |
-| GET | `/api/participants/{participantId}/profiles/{game}` | 활성 참여자의 해당 게임 프로필 조회 200 |
-| GET | `/api/game-profiles?game=LOL&page=0&size=20` | 게임별 참여자·프로필 목록, 이름·포지션 필터와 페이지 정보 반환 200 |
-
-game은 `LOL` 또는 `OVERWATCH`다. 입력 예시는 `{"accountId":"계정#태그","manualScore":1500,"preferredPositions":["LOL_TOP","LOL_MID"]}`다. 계정은 앞뒤 공백 제거 후 255자 이하이며 빈 값·null·생략은 연결 해제로 처리한다. 수동 점수는 음이 아닌 정수 또는 null이며 null·생략은 보정 해제다. 선호 포지션은 해당 게임의 enum 값으로 하나 이상 전달해야 하며 null 원소는 허용하지 않는다. PUT은 수동 편집 항목 전체를 교체하므로 생략된 계정·수동 점수는 유지하지 않는다.
-
-응답은 id, participantId, game, accountId, baseScore, manualScore, effectiveScore, preferredPositions를 포함한다. 최초 환산 점수(baseScore)는 0이며 기존 프로필 수정에서는 보존한다. 수동 점수가 있으면 실제 적용 점수(effectiveScore)로 사용하며 0점 지정도 유효하다. 보정을 해제하면 기존 환산 점수를 적용한다. Riot 조회·계정 검증·티어 환산은 아직 구현하지 않았다.
-
-GameProfileRepository는 참여자·게임으로 프로필을 찾고 기존 DB 유일 제약으로 조합별 하나를 보장한다. GameProfileService의 조회는 읽기 전용, 등록·수정은 쓰기 트랜잭션을 사용한다. 기존 프로필은 관리 상태에서 변경하며 `@Version`으로 동시 변경 충돌을 감지한다. 동시 신규 등록의 유일 제약 충돌은 공통 409로 처리한다. 참여자·프로필이 없거나 삭제된 참여자의 조회는 404, 삭제된 참여자의 등록·수정은 409다. 입력 형식·범위 오류는 400 / INVALID_REQUEST, 다른 게임의 포지션은 400 / INVALID_PREFERRED_POSITION이다. 기존 참여자 목록·상세 응답은 변경하지 않으며 V1 마이그레이션도 수정하지 않는다.
-
-GameProfileController는 GameProfileApi를 상속하며 아래와 같은 문서·HTTP 처리 책임 분리를 적용한다. GameProfileApiTests는 두 게임의 등록과 조회, 기존 환산 점수 보존, 보정 해제·0점, 반복 PUT, 입력 오류, 삭제된 참여자 제한과 Swagger 계약을 실제 DB·MockMvc로 검증한다.
-
-목록은 별도 GameProfileListController → GameProfileService → GameProfileRepository로 처리하며 문서는 GameProfileListApi에서 정의한다. 필수 game은 `LOL` 또는 `OVERWATCH`, 선택 keyword는 참여자 이름 부분 검색, 선택 position은 해당 게임의 선호 포지션 필터다. 두 검색 조건은 AND로 결합한다. keyword는 앞뒤 공백 제거 후 최대 20자이며 빈 값은 전체 조회, 영문 대소문자는 무시한다. `%`, `_`, `!`는 이름에 포함된 일반 문자로 검색한다. 다른 게임의 포지션이나 알 수 없는 enum은 400 / INVALID_REQUEST다.
-
-선택한 게임의 프로필이 있는 활성 참여자만 이름·참여자 ID 오름차순으로 조회한다. 정렬 변경은 지원하지 않는다. page 기본 0, size 기본 20·범위 1~100이며 기본값은 생략 시에만 적용한다. 명시적인 빈 페이징 값·잘못된 형식·범위·int 범위를 넘는 offset은 400이다. 응답은 content, page, size, totalElements, totalPages이며 전체 개수는 적용한 필터 기준이다. 결과가 없거나 마지막 페이지 이후이면 200과 빈 content를 반환하고 해당 필터의 전체 개수는 유지한다.
-
-각 content 항목은 participantId, profileId, name, game, accountId, effectiveScore, preferredPositions를 담는다. 화면의 참여자 선택은 participantId를 기준으로 유지한다. effectiveScore는 수동 점수(null이 아니면 0도 포함)가 우선하며 보정이 없으면 환산 점수다. 포지션 필터를 적용해도 해당 프로필의 선호 포지션 전체를 반환한다. 프로필이 없는 참여자는 이 목록에 없으므로 기본 참여자 관리에는 기존 `/api/participants`를 사용한다.
-
-페이지 쿼리는 GameProfileListRow로 프로필 ID·참여자 이름을 먼저 조회하고, 해당 페이지의 프로필과 포지션을 fetch join으로 한 번에 읽는다. 페이지 쿼리에는 컬렉션 fetch join을 넣지 않아 포지션 수에 따른 중복·메모리 페이징을 피한다. GameProfileListApiTests는 게임·활성 상태·검색·포지션·정렬·총 개수·기본값·입력 오류·Swagger 계약을 검증하며, 프로필 5개를 조회하는 경우 SQL 3개(페이지 대상·count·프로필과 포지션)로 처리되는지도 확인한다. 기존 API와 DB 스키마는 변경하지 않는다.
-
-### 팀 편성 미리보기 API
-
-`POST /api/team-previews`는 JSON으로 game(`LOL`·`OVERWATCH`), participantIds(중복 없는 UUID 10개), allowNonPreferredPositions(선택)를 받는다. 허용 값이 생략되거나 null이면 false이며 true일 때만 비선호 배정을 허용한다. 참가자가 없거나 삭제됐거나 해당 게임 프로필이 없으면 404 / RESOURCE_NOT_FOUND, 중복 ID는 400 / INVALID_TEAM_COMPOSITION, 잘못된 형식·인원 수·null ID는 400 / INVALID_REQUEST다.
-
-TeamPreviewService는 활성 참가자와 해당 게임 프로필·선호 포지션을 일괄 조회한다. 수동 점수가 있으면 0도 포함해 우선 사용하고, 없으면 환산 점수를 사용한다. 이름·점수·선호 포지션을 PreviewCandidate로 전달하고 두 엔티티 버전을 별도로 수집한다. TeamBalancer는 DB나 HTTP에 접근하지 않고 편성만 계산한다.
-
-롤은 팀별 탑·정글·미드·원딜·서포터 각 1명, 오버워치는 탱커 1·딜러 2·서포터 2명이다. A/B를 뒤집은 동일 분할을 제외한 126개 5:5 분할을 모두 비교한다. 각 팀은 32개 부분집합 상태의 동적 계획법으로 포지션 배정의 최소 위반 수를 구한다. 전체 비선호 배정 인원 수가 가장 적은 편성 중 팀 점수 차이를 최소화한다. 요청 순서에 관계없이 참가자 UUID로 정렬하며, 동일 조건의 동률 결과도 같은 편성으로 반환한다.
-
-선호 포지션만으로 편성할 수 없고 비선호를 허용하지 않으면 409 / PREFERRED_POSITION_UNAVAILABLE을 반환한다. 허용하면 최소 위반 편성과 경고를 반환한다. 응답은 game, teams(A/B 각각 participants·totalScore), scoreDifference, nonPreferredAssignmentCount, warnings, participantVersions다. 각 참가자는 participantId·name·score·assignedPosition·preferredPosition(선호 여부)을 담는다. 점수 합계와 차이는 long으로 계산해 int 합계 초과를 지원한다.
-
-미리보기는 저장하지 않으므로 성공 응답은 200이며 Match/MatchParticipant 행을 생성하지 않는다. JPA 엔티티와 임시 스냅샷 ID는 응답에 공개하지 않는다. participantVersions는 UUID마다 participantVersion·profileVersion을 담지만, 확정 승인 토큰이나 인증 수단은 아니다. 아래 확정 서비스에서 최신 DB 정보·활성 상태·역할 구성·비선호 허용 여부를 다시 검증한다. 미리보기 조회 자체는 동시 수정·삭제를 잠그지 않는다.
-
-TeamPreviewApi는 Swagger 문서, TeamPreviewController는 HTTP 매핑·바인딩·검증 실행과 ResponseEntity 반환을 담당한다. TeamBalancerTests는 독립적인 완전 순열 탐색과 비교해 최적성을 검증하고, TeamPreviewApiTests는 실제 DB·MockMvc로 입력 검증·버전·점수·미저장 동작·Swagger 계약을 검증한다.
-
-### 팀 편성 확정·저장 API
-
-`POST /api/matches`는 아래 JSON 필드를 받아 경기와 참가자 스냅샷 10개를 한 트랜잭션으로 저장한다.
-
-| 필드 | 계약 |
+| 패키지 | 책임 |
 | --- | --- |
-| game | 필수, LOL 또는 OVERWATCH |
-| participants | 필수, 중복 없는 10명. 각 항목은 participantId(UUID), team(A/B), assignedPosition 필수 |
-| participantVersions | 필수, 미리보기 응답의 참가자 UUID별 participantVersion·profileVersion. 최종 참가자 집합과 정확히 일치해야 함 |
-| allowNonPreferredPositions | 선택, 생략·null은 false. 최종 편성에 비선호 배정이 있으면 true 필요 |
+| `participant` | 참가자 등록, 이름 수정, 조회, 논리 삭제 |
+| `gameprofile` | 게임별 계정·선호 포지션·점수 관리 |
+| `match` | 팀 편성, 경기 확정과 스냅샷 저장, 결과 입력·조회 |
+| `common.exception` | 공통 오류 응답 |
 
-미리보기의 teams를 펼쳐 각 참가자에 team을 붙여 요청한다. 화면에서 같은 10명의 팀·포지션을 수동으로 바꿀 수 있지만 팀당 5명과 게임별 역할 구성은 유지해야 한다. 서버는 최종 구성을 다시 검증하며 TeamBalancer를 다시 호출해 수동 배정을 덮어쓰지 않는다. Game.teamPositions()에서 롤의 각 1명, 오버워치의 탱커 1·딜러 2·서포터 2명 규칙을 미리보기와 공유한다.
+로컬 실행과 테스트는 H2를 사용합니다. Flyway가 스키마를 관리하고 JPA는 매핑을 검증합니다. 운영 PostgreSQL 연결과 잠금 검증은 후속 작업입니다.
 
-이름·점수·생성 시각은 요청 계약에 없으며 서버의 현재 DB 정보와 시각으로 결정한다. 수동 점수가 null이 아니면 0도 우선 적용한다. Match와 MatchParticipant에는 확정 당시 이름·적용 점수·배정 포지션·팀이 저장되고, 이후 원본 정보 수정이나 논리 삭제로 과거 기록이 바뀌지 않는다. 경기 결과는 미입력(null)으로 생성한다.
+## API
 
-성공 응답은 201과 id·game·createdAt·teams·scoreDifference, 상세 조회 Location(`/api/matches/{id}`)이다. teams는 A/B 각각 participants와 totalScore를 담으며 참가자는 participantId·name·score·assignedPosition을 포함한다. 합계·차이는 long이다. 동일 POST를 반복하면 새 경기로 생성하며 요청 중복 방지 키는 지원하지 않는다.
+요청과 응답의 전체 스키마는 [Swagger UI](http://127.0.0.1:8080/swagger-ui.html)에서 확인할 수 있습니다.
 
-| 상태 | 대표 오류 |
+| 기능 | 경로 |
 | --- | --- |
-| 400 | INVALID_REQUEST: JSON·중첩 DTO·필수값·인원 수·버전 형식 오류 |
-| 400 | INVALID_TEAM_COMPOSITION: 참가자 중복 또는 5:5 위반 |
-| 400 | PREVIEW_PARTICIPANTS_MISMATCH: 참가자와 버전 맵의 키 집합 불일치 |
-| 400 | POSITION_GAME_MISMATCH: 다른 게임의 포지션 |
-| 400 | INVALID_TEAM_POSITIONS: 팀별 역할 인원 불일치 |
-| 409 | PREVIEW_OUTDATED: 참가자·프로필 없음, 참가자 삭제, 어느 한 버전이라도 변경됨 |
-| 409 | NON_PREFERRED_POSITION_NOT_ALLOWED: 최종 비선호 배정을 명시적으로 허용하지 않음 |
-| 409 | CONCURRENT_MODIFICATION: DB 잠금 충돌·교착 또는 낙관적 잠금 충돌 |
+| 참가자 등록·목록 | `POST /api/participants`, `GET /api/participants` |
+| 참가자 상세·이름 수정·삭제 | `GET/PATCH/DELETE /api/participants/{id}` |
+| 게임 프로필 조회·전체 수정 | `GET/PUT /api/participants/{id}/profiles/{game}` |
+| 게임별 프로필 목록 | `GET /api/game-profiles?game=LOL` |
+| 팀 편성 미리보기 | `POST /api/team-previews` |
+| 경기 확정 | `POST /api/matches` |
+| 경기 목록·상세 | `GET /api/matches?game=LOL`, `GET /api/matches/{id}` |
+| 경기 결과 입력·전체 수정 | `PUT /api/matches/{id}/result` |
 
-확정의 잠금 순서는 참가자 전체(ID순) → 해당 게임 프로필 전체(참가자 ID순)다. PESSIMISTIC_WRITE로 행을 잠근 후 활성 상태·두 버전을 검사하고 저장한다. 잠금은 조회 메서드 반환 시가 아니라 트랜잭션 커밋·롤백 때 해제된다. 이름 수정·삭제·점수·포지션 변경이 먼저 완료됐다면 오래된 버전을 거절한다. 확정이 먼저 잠금을 잡았다면 그 변경은 확정 종료 후 반영되어 과거 스냅샷을 바꾸지 않는다.
+`game`은 `LOL` 또는 `OVERWATCH`입니다. 목록은 `page=0`, `size=20`이 기본이며 최대 100건까지 요청할 수 있습니다. 참가자·프로필 목록은 이름·ID 오름차순, 경기 목록은 생성 시각·ID 내림차순입니다. 프로필 목록은 `keyword`와 `position`으로 필터링할 수 있습니다.
 
-프로필은 컬렉션 outer fetch join 없이 먼저 잠그고, 기존 fetch join 조회로 선호 포지션을 일괄 로딩한다. 이 분리는 PostgreSQL에서 outer join의 nullable 측을 FOR UPDATE로 잠그는 문제를 피하기 위함이다. DB 잠금은 이 애플리케이션의 JPA 변경 경로를 기준으로 검증하며, 직접 SQL로 버전 갱신을 우회하는 변경은 지원하지 않는다.
+## 편성부터 결과 입력까지
 
-MatchCreateApiTests는 실제 미리보기 → 확정 저장, 롤·오버워치, 수동 교체, 원본 변경 후 기록 보존, 버전·활성 상태·역할·허용 정책과 중첩 입력 검증을 확인한다. MatchConfirmationConcurrencyTests는 독립적으로 커밋되는 두 H2 트랜잭션으로 수정 선행과 확정 선행 양쪽의 잠금 동작을 확인한다. 운영 PostgreSQL에서의 잠금 동작 검증은 환경 구성 후 별도로 수행해야 한다.
+1. **프로필 준비** · 활성 참가자의 게임 프로필을 사용합니다. 수동 점수는 환산 점수보다 우선하며, `0`도 유효한 수동 점수입니다.
+2. **미리보기** · 중복 없는 참가자 10명을 5:5로 나눕니다. 비선호 배정을 최소화한 뒤 팀 점수 차이를 최소화합니다. 비선호 배정이 필요하면 `allowNonPreferredPositions: true`를 명시해야 합니다. 응답의 `participantVersions`는 확정 요청에 사용합니다. [편성 알고리즘 설명](TEAM_BALANCER_GUIDE.md)
+3. **확정** · 최종 팀·포지션과 미리보기 버전을 전달합니다. 서버는 참가자 행, 게임 프로필 행 순으로 잠그고 최신 버전과 역할 구성을 확인합니다. 오래된 미리보기는 409로 거절합니다. 성공하면 확정 당시 이름·점수·포지션을 스냅샷으로 저장하고 상세 조회 `Location`을 반환합니다.
+4. **결과 입력** · `scoreA`, `scoreB`는 0 이상의 JSON 정수이며 `memo`는 최대 2000자입니다. 메모를 생략하거나 `null`로 보내면 빈 문자열로 저장합니다. 미입력은 `result: null`, 입력된 0:0은 `DRAW`입니다. 참가자 수정·삭제 후에도 경기 스냅샷을 기준으로 조회하고 결과를 수정할 수 있습니다.
 
-2026-10-30 검증: 확정 API 43건·동시성 8건·공통 잠금 오류 응답 추가 2건을 포함한 전체 227건과 `test bootJar`를 통과했다.
+결과 수정은 같은 버전을 읽은 트랜잭션이 서로 다른 결과를 저장하려 할 때 낙관적 잠금으로 충돌을 감지합니다. 충돌 요청은 409 `CONCURRENT_MODIFICATION`을 반환합니다. 이전 트랜잭션이 완료된 뒤 새로 읽고 쓰는 요청은 기존 결과를 교체합니다.
 
-### 경기 기록 목록·상세 조회 API
-
-| 메서드 | 경로 | 동작 |
-| --- | --- | --- |
-| GET | `/api/matches?game=LOL&page=0&size=20` | 게임별 기록을 생성 시각·ID 내림차순으로 페이징 조회, 200 |
-| GET | `/api/matches/{id}` | 저장된 팀 스냅샷과 경기 결과 상세 조회, 200. 경기 없음 404 |
-
-목록의 game은 필수(`LOL`·`OVERWATCH`)다. page는 0부터 시작하며 기본값 0, size는 기본값 20·허용 범위 1~100이다. 기본값은 생략한 경우에만 적용하며 빈 값·숫자 형식 오류·범위 위반·int 범위를 넘는 offset은 400 / INVALID_REQUEST다. sort를 전달해도 고정 정렬을 유지한다. 마지막 페이지 이후는 빈 content와 게임별 실제 totalElements·totalPages를 반환한다.
-
-목록 응답은 content·page·size·totalElements·totalPages다. content 각 항목과 상세 응답은 같은 MatchResponse 계약으로 id·game·createdAt·teams·scoreDifference·result를 담는다. A/B 순서와 팀 내부의 포지션·참가자 ID 오름차순을 고정한다. 팀 구성은 MatchParticipant에 저장된 스냅샷에서 읽으며 현재 Participant/GameProfile을 조인하거나 Soft Delete로 제외하지 않는다. 이름·점수·선호 포지션 변경이나 참가자 삭제 후에도 당시 기록을 유지한다.
-
-result는 미입력이면 null이다. 입력돼 있으면 scoreA·scoreB·memo·outcomeA·outcomeB를 반환한다. 각 팀의 outcome은 WIN·LOSS·DRAW이고, 0:0을 포함해 동점이면 DRAW다. 경기 스코어와 팀원 실력 점수 합계는 다른 값이며, totalScore·scoreDifference는 확정 당시 실력 점수로 계산한다. 결과 입력 API는 후속 작업이지만 이미 저장된 결과는 조회한다.
-
-MatchService의 조회는 읽기 전용 트랜잭션으로 수행한다. 목록은 먼저 경기 ID를 DB 페이징한 뒤 해당 페이지의 참가자 스냅샷을 fetch join으로 일괄 로딩한다. ID 페이지의 순서대로 DTO를 만들어 일괄 조회 결과의 순서에 의존하지 않는다. 컬렉션 fetch join 쿼리에 Pageable을 직접 적용하지 않아 중복·메모리 페이징을 피한다. 총 개수 조회가 필요한 일반 페이지는 ID·count·스냅샷 3개 쿼리로 처리하며, 상세는 경기·스냅샷 1개 쿼리다.
-
-생성과 조회는 MatchTeamResponse를 공유한다. 기존 생성 응답의 JSON 필드는 유지하고, 내부 팀 DTO의 OpenAPI 스키마 이름은 MatchTeamResponse로 정리했다. 상세 조회 경로가 구현되어 생성 응답에 Location을 추가했다. MatchApi는 Swagger 계약, MatchController는 HTTP 매핑·바인딩·검증·ResponseEntity를 담당한다. 잘못된 상세 UUID는 400 / INVALID_REQUEST, 존재하지 않는 경기는 404 / RESOURCE_NOT_FOUND다.
-
-MatchQueryApiTests는 두 게임·고정 정렬·페이지와 총 개수·입력 오류·결과 미입력과 승패/무승부·원본 변경/삭제 후 과거 기록·생성 Location·Swagger 계약을 검증한다. 목록 5경기·50명에서 SQL 3개, 상세에서 SQL 1개도 확인한다. 기존 저장 스키마·편성 알고리즘·확정 잠금 정책은 변경하지 않았다.
-
-2026-10-30 조회 검증: MatchQueryApiTests 29건과 전체 256건(실패·오류·스킵 0), `test bootJar`를 통과했다.
-
-## 계층별 책임
-
-| 계층 | 책임 |
-|---|---|
-| controller | HTTP 요청 수신, 입력 검증, service 호출, 응답·오류 변환 |
-| service | 기능 처리, 트랜잭션, repository 호출, 외부 API 결과 반영 |
-| repository | Spring Data JPA를 통한 저장·조회. 활성 참여자 조회에 Soft Delete 조건 적용 |
-| entity | JPA 매핑, 상태 변경과 모델 자체의 기본 검증 |
-| dto | request는 HTTP 요청, response는 HTTP 응답. 공통·내부 처리 타입은 dto 바로 아래 유지 |
-
-기본 흐름은 `controller → service → repository`다. Entity는 controller나 service를 참조하지 않는다. 다른 업무의 기능이 필요하면 해당 service를 호출하는 방식으로 시작하고 순환 호출은 피한다. 이를 위해 별도의 조회 인터페이스나 변환 계층을 의무적으로 만들지는 않는다.
-
-`participant`, `gameprofile`, `match`의 HTTP DTO는 동일하게 `dto.request`와 `dto.response`로 구분한다. ParticipantVersions는 요청·응답에서 함께 쓰는 버전 값, TeamPreview·PreviewCandidate는 내부 편성 처리 결과와 입력, GameProfileListRow는 JPQL 조회 결과이므로 각 도메인의 dto 바로 아래 둔다. DTO 이동 시 package·import를 함께 갱신하고, JPQL 생성자 표현식이 참조하는 타입을 이동한다면 완전한 클래스 경로도 바꿔야 한다. 이번 정리에서는 GameProfileListRow를 이동하지 않아 기존 JPQL 경로를 유지했다. 패키지 분리는 API 경로·JSON 필드·검증 규칙·DB 스키마를 변경하지 않는다.
-
-`participant`는 참여자 이름·등록·Soft Delete를, `gameprofile`은 게임 계정·점수·선호 포지션을 담당한다. GameProfileService는 참여자의 존재·활성 여부를 확인하기 위해 ParticipantRepository를 참조한다. 이 검증과 프로필 저장은 같은 트랜잭션에서 처리한다. `Game`과 `Position`은 `gameprofile.entity`에서 정의하며 match에서도 같은 enum을 사용한다. TeamPreviewService도 두 repository를 이용해 편성 데이터를 일괄 조회한다. 패키지 분리는 API 경로와 DB 테이블·컬럼·enum 저장값을 변경하지 않는다. `TeamPreview`는 내부 처리 결과로 `MatchParticipant` 목록을 담고, HTTP에는 전용 TeamPreviewResponse로 변환한다.
-
-`Match.validateTeams(game, participants)`는 미리보기와 확정 기록이 공유하는 인원·중복·5:5·게임과 배정 포지션 일치 검증이다. 실제 포지션 배정과 점수 차이 최소화는 `match.service.TeamBalancer`에서 계산하고 HTTP·DB 없이 테스트한다.
-
-## 외부 API 분리
-
-Riot 연동은 `external.riot` 패키지에 클라이언트, 외부 요청·응답 DTO, 통신 오류 처리를 모은다. 게임 프로필 service가 클라이언트를 호출하고 결과를 내부 모델에 반영한다. API 키는 환경 변수 등 외부 설정에서 주입한다.
-
-현재는 패키지 수준 분리이며 별도 Gradle 모듈이나 HTTP 클라이언트 의존성을 추가하지 않았다. 실제 연동 구현 시 필요한 통신 의존성을 선택한다.
-
-## 저장 모델과 유지한 정책
-
-| 모델 | 저장 형태 |
-|---|---|
-| Participant | `participants`, `deletedAt`으로 Soft Delete 표시 |
-| GameProfile | `game_profiles` + `game_profile_positions`, 참여자 ID·게임 조합 유일 |
-| Match | `matches`, MatchParticipant를 단방향 OneToMany로 소유 |
-| MatchParticipant | `match_participants`, 참여자는 UUID로 참조하고 확정 당시 값을 복사 |
-| MatchResult | Embeddable, `matches`에 스코어·메모 포함 |
-| TeamPreview | record, 영구 저장하지 않음 |
-
-Participant·GameProfile·Match에는 낙관적 잠금용 `@Version`이 있다. 별도 저장 Entity와 변환 계층은 만들지 않는다. Lombok은 Getter와 보호된 기본 생성자에 사용하며 Setter/Data는 사용하지 않는다. 컬렉션 getter는 읽기 전용 복사본을 반환한다.
-
-- 수동 점수는 환산 점수보다 우선한다. 갱신해도 유지하며 `null`은 보정 해제, `0`은 유효한 지정값이다.
-- 참여자 삭제는 과거 기록 삭제가 아니다. 확정 당시 닉네임·점수·포지션·팀은 이후 현재 정보 수정으로 바뀌지 않는다.
-- 패키지 재배치 자체는 테이블·컬럼을 변경하지 않는다. 포지션 enum 전환의 저장값 변경은 아래 기준을 따른다.
-
-## build.gradle 의존성
-
-Spring Boot 4.1.1, Java 17과 기존 플러그인 버전은 유지한다. 라이브러리 버전은 Spring Boot의 의존성 관리에 맡긴다.
-
-| 의존성 | 용도·범위 |
-|---|---|
-| Web MVC starter | REST API 기반, implementation |
-| springdoc OpenAPI Web MVC UI | Swagger UI와 OpenAPI 문서, 3.1.1, implementation |
-| Data JPA starter | JPA Entity와 저장소 기반, implementation |
-| Flyway starter | 초기 스키마와 외래 키 마이그레이션 실행, implementation |
-| Flyway PostgreSQL 지원·PostgreSQL JDBC | 운영 DB 지원, runtimeOnly |
-| H2 | 로컬 실행·테스트 DB, runtimeOnly. 현재 실행 호환성을 위해 유지하며 bootJar에도 포함 |
-| H2 console | developmentOnly, 운영 bootJar에서 제외 |
-| Lombok | compileOnly + annotationProcessor |
-| Spring Boot test starter | 현재 단위·SpringBootTest 통합 테스트, testImplementation |
-| JUnit platform launcher | 테스트 실행, testRuntimeOnly |
-
-Spring Modulith core/JPA/runtime/test와 BOM을 제거했다. 사용하지 않는 JPA·Flyway 테스트 전용 starter, 테스트용 Lombok 설정도 제거했다. 공통 예외 응답의 MVC 테스트를 위해 Web MVC 테스트 starter를 사용하며, 요청 DTO의 Bean Validation을 위해 Validation starter를 사용한다.
-
-## 남은 구현과 주의점
-
-1. PostgreSQL 운영 연결과 환경별 설정을 확정한다. 이후 스키마 변경은 후속 Flyway 마이그레이션으로 관리한다.
-2. 미리보기·확정 저장·기록 목록 및 상세 조회는 구현했다.
-3. 경기 결과 입력·수정과 참가자 최근 내전 조회를 구현한다.
-4. Riot API를 실제로 연동한다.
-5. 백엔드 계약 완성 후 참여자·프로필·미리보기·내전 기록 API를 프론트에 연결한다. 페이지 이동과 페이지 간 참여자 선택 유지도 구현한다.
-
-미리보기의 `participantVersions`는 참가자 UUID마다 `ParticipantVersions(participantVersion, profileVersion)`를 보관한다. 참여자와 해당 게임 프로필의 독립적인 버전을 모두 표현한다. 확정 서비스는 참가자 집합과 버전 키 집합이 같은지, 현재 DB의 두 버전·활성 상태가 유효한지 검사하고 잠금 상태에서 스냅샷을 저장한다. 버전은 서버 발급 승인 토큰이 아니며 최초 미리보기 호출 여부를 인증하지 않는다.
-
-Match/TeamPreview는 인원·중복·5:5와 배정 포지션이 해당 게임에 속하는지 검증한다. 미리보기의 역할 배정은 TeamBalancer가 계산하며, 확정 시 Match.validateRoleComposition()과 MatchService가 수동 교체 후 역할·비선호 허용을 재검증한다. 기존 Match 생성자에 역할 정책을 추가하지 않아 과거 저장 모델 테스트와 기존 생성 경로는 유지한다. 티어·LP 원본, 조회 시각과 계정 유일성도 후속 설계 대상이다. 백엔드는 `OVERWATCH`, 프론트는 `OW`를 사용하므로 API 연결 시 통일 또는 변환이 필요하다.
-
-## 검증
-
-프로젝트 루트에서 실행한다.
-
-```text
-gradlew.bat test bootJar
-```
-
-ParticipantEntityTests·GameProfileEntityTests·MatchEntityTests로 각 모델 규칙, JpaModelTests로 H2 저장·변경 감지·스냅샷 저장, TeamForgeApplicationTests로 컨텍스트 구성을 검증한다. 프로필 테스트는 `gameprofile` 아래, 참여자 테스트는 `participant` 아래 둔다. Modulith 전용 경계 테스트는 새 구조에서 제거했다.
-
-Java 지역 변수는 테스트를 포함해 명시적 타입으로 선언하며 `var`를 사용하지 않는다.
-
-테스트 작성 시 `// given`, `// when`, `// then` 주석으로 준비·실행·검증을 구분한다. 예외 검증처럼 실행과 검증이 함께 이루어지는 경우 `// when / then`을 사용한다. 여러 상태 변경을 검증하는 테스트는 각 단계의 when/then을 반복해 표시한다.
-
-## 포지션 타입
-
-`gameprofile.entity.Position`은 게임 정보를 가진 단일 enum이다. 롤은 `LOL_TOP`, `LOL_JUNGLE`, `LOL_MID`, `LOL_BOTTOM`, `LOL_SUPPORT`, 오버워치는 `OVERWATCH_TANK`, `OVERWATCH_DAMAGE`, `OVERWATCH_SUPPORT`를 사용한다.
-
-GameProfile의 선호 포지션은 `Set<Position>`, MatchParticipant의 배정 포지션은 `Position`이다. GameProfile은 비어 있는 선택과 다른 게임의 포지션을 거절한다. 두 필드 모두 `@Enumerated(EnumType.STRING)`으로 이름을 저장한다.
-
-기존 문자열 데이터가 있다면 게임에 따라 `TOP` → `LOL_TOP`, `SUPPORT` → `LOL_SUPPORT` 또는 `OVERWATCH_SUPPORT` 등으로 변환해야 한다. 초기 Flyway 마이그레이션은 빈 DB를 대상으로 하며 기존 데이터 변환은 포함하지 않는다. 프론트의 기존 포지션 문자열은 API 연결 시 변환한다. enum 도입만으로 팀의 포지션 구성·비선호 배정 승인 검증이 완성되는 것은 아니다.
-
-## DB 외래 키와 스키마 관리
-
-내전 기록의 생성 시각은 `Match.createdAt` / `matches.created_at`으로 저장한다. 생성자에 전달한 시각을 사용하며 자동 시각 생성은 하지 않는다. 초기 개발 단계이므로 V1에서 `created_at`을 직접 정의한다. 수정 전 V1을 적용한 개발 DB를 재사용하면 Flyway 체크섬이 일치하지 않으므로, 데이터가 불필요한 개발 DB에 한해 초기화 후 적용한다.
-
-`src/main/resources/db/migration/V1__create_initial_schema.sql`에서 초기 테이블과 제약을 생성한다. Hibernate는 `ddl-auto=validate`로 매핑을 확인하고 스키마를 생성·변경하지 않는다. 로컬 H2와 JPA 통합 테스트도 Flyway로 같은 스크립트를 실행한다.
-
-| 자식 컬럼 | 참조 대상 | 제약 이름 |
-|---|---|---|
-| game_profiles.participant_id | participants.id | fk_game_profiles_participant |
-| match_participants.participant_id | participants.id | fk_match_participants_participant |
-| game_profile_positions.profile_id | game_profiles.id | fk_game_profile_positions_profile |
-| match_participants.match_id | matches.id | fk_match_participants_match |
-
-Java의 참여자 참조 필드는 UUID로 유지한다. DB FK는 JPA 객체 연관관계 없이도 존재하지 않는 참여자 ID의 저장을 막는다. 참조 중인 부모 행은 `ON DELETE RESTRICT`로 물리 삭제를 거절하며, 참여자의 Soft Delete와 과거 스냅샷 보존은 그대로 동작한다. FK는 참여자의 활성 여부까지 검사하지 않으므로 서비스에서 별도 확인해야 한다.
-
-초기 SQL은 H2·PostgreSQL에서 사용할 수 있는 UUID, VARCHAR, TIMESTAMP WITH TIME ZONE 타입으로 작성한다. 기존 스키마에 자동 baseline하거나 데이터를 삭제하지 않는다. 이미 데이터가 있는 DB는 별도의 전환 계획이 필요하다. 운영 PostgreSQL 연결 설정은 아직 포함하지 않는다.
-
-`ForeignKeyTests`는 SQL 직접 삽입·삭제에도 FK가 적용되는지와 Soft Delete 후 프로필·스냅샷이 유지되는지 검증한다. 기존 JPA 저장 테스트도 실제 참여자를 먼저 저장하도록 구성한다.
-
-## 공통 예외 처리
-
-공통 오류 응답은 요청의 `Accept`와 무관하게 `Content-Type: application/json`으로 반환한다. XML처럼 지원하지 않는 응답 형식을 요구해도 원래 오류 상태와 `code`, `message`를 유지한다. Spring MVC 오류 헤더는 복사한 뒤 Content-Type만 지정하여 `Allow`, 지원 미디어 타입 등 기존 헤더를 보존한다. 정상 응답의 콘텐츠 협상은 변경하지 않는다.
-
-`common.exception`에 다음 네 타입을 둔다.
-
-| 타입 | 역할 |
-|---|---|
-| ErrorCode | 오류 식별 enum, HTTP 상태, 공개 메시지 |
-| BusinessException | 예상 가능한 업무 규칙 위반과 해당 ErrorCode 전달 |
-| ErrorResponse | `code`, `message`로 구성한 JSON 응답 record |
-| GlobalExceptionHandler | `@RestControllerAdvice`로 MVC 오류 응답 통일 |
-
-기존 모델의 명시적인 이름·점수·포지션·편성·결과·버전 검증은 BusinessException을 사용한다. ErrorCode는 업무 패키지를 참조하지 않는다. `Objects.requireNonNull` 같은 내부 계약 검사와 불변 컬렉션의 예외까지 업무 예외로 바꾸지는 않는다. HTTP 입력값은 DTO에서 `@Valid`와 Bean Validation으로 검증한다.
-
-```json
-{
-  "code": "INVALID_PARTICIPANT_NAME",
-  "message": "이름은 공백이 아닌 1~20자여야 합니다."
-}
-```
-
-- 업무 입력 오류와 잘못된 JSON·파라미터·Bean Validation: 400
-- 삭제된 참여자 수정: 409 / PARTICIPANT_DELETED
-- Spring Data 제약 위반: 409 / DATA_CONFLICT
-- Spring Data 낙관적·비관적 잠금 충돌: 409 / CONCURRENT_MODIFICATION
-- 미존재 경로·메서드·미디어 타입: Spring MVC가 결정한 404·405·415 등 상태와 표준 헤더 유지
-- 예상하지 못한 예외: 서버에 오류 로그를 남기고 500 / INTERNAL_SERVER_ERROR 반환
-
-내부 예외 메시지, SQL, 거절된 입력값과 스택 트레이스는 응답에 포함하지 않는다. 입력 오류의 필드별 상세 목록은 현재 제공하지 않는다. Spring MVC가 처리하는 예외는 ResponseEntityExceptionHandler를 통해 처리하며, 필터·서블릿 컨테이너 밖의 오류나 비동기 작업 오류까지 처리하는 구조는 아니다.
-
-`GlobalExceptionHandlerTests`의 테스트 전용 컨트롤러와 MockMvc로 공통 오류 응답을 검증한다. 실제 참여자 API의 입력 오류·조회 실패는 ParticipantApiTests에서 검증한다. 엔티티 단위 테스트에서는 예외 타입과 ErrorCode를 함께 확인한다. 서비스의 업무 예외와 repository의 데이터 접근 예외는 공통 처리기로 전달한다.
+오류 응답은 `code`와 `message`를 반환합니다. 잘못된 입력은 400, 리소스가 없으면 404, 버전·잠금 충돌은 409입니다.

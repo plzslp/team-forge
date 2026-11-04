@@ -2,6 +2,7 @@ package com.example.teamforge.match.controller;
 
 import com.example.teamforge.common.exception.ErrorResponse;
 import com.example.teamforge.match.dto.request.MatchCreateRequest;
+import com.example.teamforge.match.dto.request.MatchResultRequest;
 import com.example.teamforge.match.dto.response.MatchCreateResponse;
 import com.example.teamforge.match.dto.request.MatchListRequest;
 import com.example.teamforge.match.dto.response.MatchPageResponse;
@@ -20,6 +21,20 @@ import java.util.UUID;
 
 @Tag(name = "Matches", description = "확정 내전 기록 API")
 public abstract class MatchApi {
+    @Operation(summary = "경기 결과 입력·수정", description = "A/B팀 스코어와 메모를 전체 교체합니다. 스코어는 필수이며 0 이상입니다. "
+            + "메모는 최대 2000자이며 생략·null은 빈 문자열로 저장합니다. 0:0도 입력된 무승부입니다. "
+            + "겹친 수정 트랜잭션의 버전 충돌은 409입니다. 클라이언트 버전 비교는 하지 않아 이전 수정 완료 후의 요청은 덮어씁니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "갱신된 경기 상세 스냅샷과 결과"),
+            @ApiResponse(responseCode = "400", description = "잘못된 경기 UUID·필수 스코어 누락·음수·메모 길이 초과",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "경기 없음",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "동시 수정 충돌: CONCURRENT_MODIFICATION",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public abstract ResponseEntity<MatchResponse> recordResult(UUID id, MatchResultRequest request);
+
     @Operation(summary = "팀 편성 확정·저장", description = "미리보기의 참가자·프로필 버전과 최종 5:5 팀·포지션을 전달합니다. "
             + "수동 교체는 허용하지만 게임별 역할 구성과 비선호 배정 허용 여부를 다시 검증합니다. "
             + "이름·점수·생성 시각은 서버에서 결정하며 확정 당시 스냅샷을 저장합니다. "

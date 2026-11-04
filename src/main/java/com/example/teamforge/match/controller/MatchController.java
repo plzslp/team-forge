@@ -1,6 +1,7 @@
 package com.example.teamforge.match.controller;
 
 import com.example.teamforge.match.dto.request.MatchCreateRequest;
+import com.example.teamforge.match.dto.request.MatchResultRequest;
 import com.example.teamforge.match.dto.response.MatchCreateResponse;
 import com.example.teamforge.match.dto.request.MatchListRequest;
 import com.example.teamforge.match.dto.response.MatchPageResponse;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 
 import java.net.URI;
 import java.util.UUID;
@@ -26,6 +28,13 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class MatchController extends MatchApi {
     private final MatchService matchService;
+
+    @Override
+    @PutMapping(value = "/{id}/result", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<MatchResponse> recordResult(@PathVariable("id") UUID id,
+                                                     @Valid @RequestBody MatchResultRequest request) {
+        return ResponseEntity.ok(matchService.recordResult(id, request));
+    }
 
     @Override
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)

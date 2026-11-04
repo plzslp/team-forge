@@ -2,24 +2,21 @@
 
 [![Codecov](https://codecov.io/gh/plzslp/team-forge/branch/dev/graph/badge.svg)](https://app.codecov.io/gh/plzslp/team-forge/tree/dev)
 
-롤·오버워치 내전 참가자 10명을 실력과 포지션을 고려해 5:5 팀으로 편성하는 개인용 웹 프로젝트입니다.
-
-현재 개발 초기 단계이며, 프론트엔드는 실제 API·DB와 연결되지 않은 데모입니다.
-
-## 기술 스택
-
-| 구분 | 기술 |
-|---|---|
-| Backend | Java 17, Spring Boot, Spring Data JPA |
-| Frontend | React, TypeScript, Vite |
-| Database | H2, PostgreSQL |
-| Build / Test | Gradle, JUnit |
+롤·오버워치 내전 참가자 10명을 실력과 선호 포지션에 따라 5:5로 편성합니다. 백엔드는 참가자와 게임 프로필, 확정 경기와 결과를 관리합니다. 프론트엔드는 백엔드 없이 실행되는 데모입니다.
 
 ## 로컬 실행
 
-JDK 17과 Node.js·npm이 필요합니다. 아래 명령은 Windows 기준이며, 각 절은 저장소 루트에서 시작합니다.
+Windows 기준이며 각 명령은 저장소 루트에서 시작합니다.
 
-### 프론트엔드
+**백엔드** · JDK 17, Spring Boot, H2
+
+```powershell
+.\gradlew.bat bootRun
+```
+
+[Swagger UI](http://127.0.0.1:8080/swagger-ui.html)에서 API를 실행할 수 있습니다.
+
+**프론트엔드** · Node.js, npm, React, TypeScript, Vite
 
 ```powershell
 cd frontend
@@ -27,61 +24,13 @@ npm.cmd ci
 npm.cmd run dev -- --port 5173 --strictPort
 ```
 
-접속: [http://127.0.0.1:5173](http://127.0.0.1:5173)
+[데모 열기](http://127.0.0.1:5173) · 새로고침하면 데모의 참가자와 편성 기록이 초기화됩니다.
 
-데모 화면은 백엔드 없이 실행할 수 있습니다. 새로고침하면 참여자·편성 기록이 초기화됩니다.
+## 검증과 빌드
 
-### 백엔드
+| 대상 | 명령 | 결과물 |
+| --- | --- | --- |
+| 백엔드 | `.\gradlew.bat test bootJar` | `build/libs/` |
+| 프론트엔드 | `npm.cmd run build` (`frontend/`에서 실행) | `frontend/dist/` |
 
-```powershell
-.\gradlew.bat bootRun
-```
-
-접속 주소: [http://127.0.0.1:8080](http://127.0.0.1:8080)
-
-프론트 화면은 별도로 실행합니다. 백엔드 루트 주소에서는 화면이 표시되지 않습니다.
-참여자 등록·목록·상세 조회·이름 수정·Soft Delete API를 제공하며, 프론트 데모와는 아직 연결하지 않았습니다.
-목록 조회는 `/api/participants?page=0&size=20`으로 요청하며, `content`와 페이지 정보를 반환합니다. 페이지 번호는 0부터, 크기는 1~100이며 이름·ID 오름차순으로 정렬합니다.
-
-게임별 참여자·프로필 목록은 `/api/game-profiles?game=LOL&page=0&size=20`으로 조회합니다. game은 필수(`LOL`·`OVERWATCH`)이며 keyword(이름 부분 검색)와 position(선호 포지션)으로 필터링할 수 있습니다. 해당 게임 프로필이 있는 활성 참여자만 반환하고, 목록에 이름·계정·적용 점수·선호 포지션을 포함합니다. 같은 페이지 규칙을 사용하며 프론트 연동은 후속 작업입니다.
-
-팀 편성 미리보기는 `POST /api/team-previews`에 game과 중복 없는 participantIds 10개를 전달합니다. 선호 포지션을 우선 충족하고 팀 점수 차이를 최소화한 5:5 결과와 변경 감지 버전을 반환하며 저장하지 않습니다. 롤은 각 포지션 1명, 오버워치는 탱커 1·딜러 2·서포터 2명입니다. 선호 편성이 불가능하면 409를 반환하고, `allowNonPreferredPositions: true`를 명시하면 비선호 배정 수를 최소화한 결과와 경고를 반환합니다.
-
-팀 편성 확정은 `POST /api/matches`에 game, 최종 participants 10명(participantId·team·assignedPosition), 미리보기의 participantVersions와 비선호 허용 여부를 전달합니다. 서버가 최신 이름·점수·버전과 역할 구성을 검증하고 스냅샷을 저장한 뒤 201과 경기 ID·시각·팀 정보, 상세 조회 Location을 반환합니다. 정보 변경·삭제 후 확정은 409로 거절하며 참가자·프로필 잠금으로 검증과 저장 사이의 동시 변경을 막습니다. 같은 요청을 반복하면 별도 경기가 생성됩니다.
-
-경기 기록은 `GET /api/matches?game=LOL&page=0&size=20`과 `GET /api/matches/{id}`로 조회합니다. 목록의 game은 필수이며 생성 시각·ID 내림차순으로 고정하고, 페이지 크기는 1~100입니다. 두 조회 모두 확정 당시 스냅샷과 경기 결과를 제공하므로 참가자를 수정·삭제해도 과거 기록은 유지됩니다. 결과 미입력은 null, 입력된 0:0은 무승부입니다. 경기 결과 입력·수정·참가자 최근 내전 조회 → Riot 연동 → 프론트 통합 순서로 후속 작업을 진행합니다.
-
-API 문서는 [Swagger UI](http://127.0.0.1:8080/swagger-ui.html)에서 확인할 수 있습니다.
-
-실행 종료는 해당 터미널에서 `Ctrl+C`를 누릅니다.
-
-## 테스트와 빌드
-
-백엔드 테스트와 JAR 빌드:
-
-```powershell
-.\gradlew.bat test bootJar
-```
-
-프론트엔드 빌드:
-
-```powershell
-cd frontend
-npm.cmd run build
-```
-
-결과물은 각각 `build/libs/`, `frontend/dist/`에 생성됩니다. 프론트 빌드 결과는 아직 백엔드 JAR에 포함되지 않습니다.
-
-## 테스트 커버리지
-
-백엔드 테스트 실행 시 JaCoCo 보고서가 `build/reports/jacoco/test/`에 생성됩니다.
-`html/index.html`은 로컬 확인용이며, `jacocoTestReport.xml`은 Codecov 업로드용입니다.
-
-GitHub Actions는 `dev`·`main` 대상 PR과 해당 브랜치의 push에서 테스트·JAR 빌드·커버리지 업로드를 실행합니다.
-Codecov에서 이 GitHub 저장소를 연결해야 하며, 업로드에는 OIDC 인증을 사용하므로 `CODECOV_TOKEN`은 필요하지 않습니다.
-포크 PR은 테스트와 보고서 생성만 실행하고 업로드는 생략합니다.
-커버리지는 초기에는 참고 지표로 사용하며, 수치에 따른 병합 제한은 두지 않습니다. 업로드 오류는 CI 실패로 처리합니다.
-
-## 문서
-
-- [백엔드 구조](docs/BACKEND_STRUCTURE.md)
+[백엔드 구조와 API 흐름](docs/BACKEND_STRUCTURE.md)
