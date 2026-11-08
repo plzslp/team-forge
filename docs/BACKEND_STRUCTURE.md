@@ -25,8 +25,11 @@ TeamForge 백엔드는 Java 17과 Spring Boot를 사용하는 단일 Gradle 프�
 | 경기 확정 | `POST /api/matches` |
 | 경기 목록·상세 | `GET /api/matches?game=LOL`, `GET /api/matches/{id}` |
 | 경기 결과 입력·전체 수정 | `PUT /api/matches/{id}/result` |
+| 참가자 최근 내전 | `GET /api/participants/{id}/matches?game=LOL` |
 
 `game`은 `LOL` 또는 `OVERWATCH`입니다. 목록은 `page=0`, `size=20`이 기본이며 최대 100건까지 요청할 수 있습니다. 참가자·프로필 목록은 이름·ID 오름차순, 경기 목록은 생성 시각·ID 내림차순입니다. 프로필 목록은 `keyword`와 `position`으로 필터링할 수 있습니다.
+
+참가자 최근 내전은 `game`이 필수이고 기본 페이지 크기는 10입니다. 확정 기록을 생성 시각·ID 내림차순으로 조회하고 경기 ID, 생성 시각, 소속 팀, A/B 스코어와 소속 팀 기준 승패를 반환합니다. 결과 미입력 시 스코어와 승패는 `null`입니다. 참가자가 없거나 삭제됐으면 404를 반환합니다.
 
 ## 편성부터 결과 입력까지
 
