@@ -26,6 +26,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -124,21 +127,29 @@ class RiotProfileApiTests {
     @ParameterizedTest
     @ValueSource(strings = {"account", "manualScore", "delete"})
     void rejectsStaleExternalResponseWhenProfileOrParticipantChanges(String change) throws Exception {
-        // given: HTTP 통신을 기다리는 동안 별도 트랜잭션이 정보를 변경한다.
-        when(riot.findSoloRank("player#KR1")).thenAnswer(invocation -> {
-            transaction().executeWithoutResult(status -> {
-                GameProfile profile = em.find(GameProfile.class, profileId);
-                switch (change) {
-                    case "account" -> profile.update("other#KR1", 0, Set.of(Position.LOL_MID));
-                    case "manualScore" -> profile.overrideScore(3000);
-                    case "delete" -> em.find(Participant.class, participantId).delete(Instant.now());
-                    default -> throw new AssertionError(change);
-                }
+        // given: 별도 스레드·영속성 컨텍스트에서 변경을 커밋한 후 Riot 응답을 반환한다.
+        ExecutorService worker = Executors.newSingleThreadExecutor();
+        try {
+            when(riot.findSoloRank("player#KR1")).thenAnswer(invocation -> {
+                worker.submit(() -> transaction().executeWithoutResult(status -> {
+                    GameProfile profile = em.find(GameProfile.class, profileId);
+                    switch (change) {
+                        case "account" -> profile.update("other#KR1", 0, Set.of(Position.LOL_MID));
+                        case "manualScore" -> profile.overrideScore(3000);
+                        case "delete" -> em.find(Participant.class, participantId).delete(Instant.now());
+                        default -> throw new AssertionError(change);
+                    }
+                })).get(5, TimeUnit.SECONDS);
+                return new RiotRank("new-puuid", "EMERALD", "I", 80);
             });
-            return new RiotRank("new-puuid", "EMERALD", "I", 80);
-        });
-        // when / then: 새 계정·수동 점수·삭제 이후 오래된 응답을 저장하지 않는다.
-        mvc.perform(post(url())).andExpect(status().isConflict());
+            // when / then: 새 계정·수동 점수·삭제 이후 오래된 응답을 저장하지 않는다.
+            mvc.perform(post(url())).andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value(change.equals("delete")
+                            ? "PARTICIPANT_DELETED" : "CONCURRENT_MODIFICATION"));
+        } finally {
+            worker.shutdownNow();
+            assertTrue(worker.awaitTermination(5, TimeUnit.SECONDS));
+        }
         transaction().executeWithoutResult(status ->
                 assertEquals(1445, em.find(GameProfile.class, profileId).getBaseScore()));
     }

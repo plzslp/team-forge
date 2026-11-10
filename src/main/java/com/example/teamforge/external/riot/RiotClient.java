@@ -3,6 +3,7 @@ package com.example.teamforge.external.riot;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.example.teamforge.common.exception.BusinessException;
 import com.example.teamforge.common.exception.ErrorCode;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
@@ -13,8 +14,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
+@Slf4j
 public class RiotClient {
     private final WebClient accountClient;
     private final WebClient leagueClient;
@@ -58,13 +61,17 @@ public class RiotClient {
         return rank;
     }
 
+    @SuppressWarnings("PMD.PreserveStackTrace") // 원인 예외의 URI·인증 헤더·응답 본문 노출을 방지한다.
     private <T> T get(WebClient client, String path, ParameterizedTypeReference<T> type,
                       ErrorCode notFound, Object... variables) {
         if (apiKey.isBlank()) throw new BusinessException(ErrorCode.RIOT_NOT_CONFIGURED);
         if (Instant.now().isBefore(retryAt.get())) throw new BusinessException(ErrorCode.RIOT_RATE_LIMITED);
+        String host = client == accountClient ? "asia.api.riotgames.com" : "kr.api.riotgames.com";
+        AtomicInteger receivedStatus = new AtomicInteger();
         try {
             return client.get().uri(path, variables).exchangeToMono(response -> {
                 int status = response.statusCode().value();
+                receivedStatus.set(status);
                 if (status == 200) return response.bodyToMono(type);
                 ErrorCode error = switch (status) {
                     case 401, 403 -> ErrorCode.RIOT_AUTHENTICATION_FAILED;
@@ -86,9 +93,11 @@ public class RiotClient {
                 return response.releaseBody().then(Mono.<T>error(new BusinessException(error)));
             }).switchIfEmpty(Mono.error(new BusinessException(ErrorCode.RIOT_UNAVAILABLE)))
                     .timeout(Duration.ofSeconds(5)).block();
-        } catch (BusinessException exception) {
-            throw exception;
         } catch (RuntimeException exception) {
+            log.warn("Riot 호출 실패: host={}, status={}, cause={}", host,
+                    receivedStatus.get() == 0 ? "unknown" : receivedStatus.get(),
+                    exception.getClass().getSimpleName());
+            if (exception instanceof BusinessException businessException) throw businessException;
             // 외부 응답·URI·인증 헤더가 공통 예외 로그나 응답에 노출되지 않도록 변환한다.
             throw new BusinessException(ErrorCode.RIOT_UNAVAILABLE);
         }

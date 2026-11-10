@@ -3,6 +3,9 @@ package com.example.teamforge.external.riot;
 import com.example.teamforge.common.exception.BusinessException;
 import com.example.teamforge.common.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -18,7 +21,39 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@ExtendWith(OutputCaptureExtension.class)
 class RiotClientTests {
+    @ParameterizedTest
+    @ValueSource(ints = {401, 403, 500})
+    void logsActualHttpStatusWithoutSensitiveData(int status, CapturedOutput output) {
+        // given
+        RiotClient client = new RiotClient(WebClient.builder().exchangeFunction(request ->
+                Mono.just(ClientResponse.create(HttpStatus.valueOf(status))
+                        .body("private-upstream-body").build())), "private-api-key");
+        // when
+        assertThrows(BusinessException.class, () -> client.findSoloRank("private-player#KR1"));
+        // then
+        assertTrue(output.getOut().contains("host=asia.api.riotgames.com, status=" + status));
+        assertFalse(output.getAll().contains("private-api-key"));
+        assertFalse(output.getAll().contains("private-upstream-body"));
+        assertFalse(output.getAll().contains("private-player"));
+        assertFalse(output.getAll().contains("/riot/account"));
+    }
+
+    @Test
+    void logsTransportExceptionTypeWithoutItsMessageOrGuessedStatus(CapturedOutput output) {
+        // given
+        RiotClient client = new RiotClient(WebClient.builder().exchangeFunction(request ->
+                Mono.error(new IllegalStateException("private-message private-api-key"))), "private-api-key");
+        // when / then
+        assertError(ErrorCode.RIOT_UNAVAILABLE, () -> client.findSoloRank("private-player#KR1"));
+        assertTrue(output.getOut().contains("host=asia.api.riotgames.com, status=unknown, cause=IllegalStateException"));
+        assertFalse(output.getAll().contains("private-message"));
+        assertFalse(output.getAll().contains("private-api-key"));
+        assertFalse(output.getAll().contains("private-player"));
+        assertFalse(output.getAll().contains("/riot/account"));
+    }
+
     @Test
     void usesRegionalAccountThenPlatformLeagueEndpointAndOnlySoloQueue() {
         // given: 외부 통신 경계에서 URL·토큰 헤더와 실제 JSON 디코딩을 확인한다.

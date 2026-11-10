@@ -13,6 +13,7 @@ import com.example.teamforge.participant.repository.ParticipantRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import jakarta.persistence.EntityManager;
 
 import java.time.Instant;
 import java.util.List;
@@ -25,13 +26,16 @@ public class RiotProfileService {
     private final GameProfileRepository profiles;
     private final RiotClient riotClient;
     private final TransactionTemplate transaction;
+    private final EntityManager entityManager;
 
     public RiotProfileService(ParticipantRepository participants, GameProfileRepository profiles,
-                              RiotClient riotClient, PlatformTransactionManager transactionManager) {
+                              RiotClient riotClient, PlatformTransactionManager transactionManager,
+                              EntityManager entityManager) {
         this.participants = participants;
         this.profiles = profiles;
         this.riotClient = riotClient;
         this.transaction = new TransactionTemplate(transactionManager);
+        this.entityManager = entityManager;
     }
 
     public GameProfileResponse refresh(UUID participantId) {
@@ -46,6 +50,8 @@ public class RiotProfileService {
         // HTTP 통신은 트랜잭션 밖에서 수행하고, 저장 직전에 참가자 → 프로필 순서로 잠근다.
         RiotRank rank = riotClient.findSoloRank(snapshot.accountId());
         return transaction.execute(status -> {
+            // Open-in-View가 보관한 이전 객체를 비워 잠금 조회에서 최신 활성 상태·버전을 읽는다.
+            entityManager.clear();
             Participant participant = participants.findAllForMatchConfirmation(List.of(participantId)).stream()
                     .findFirst().orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
             if (!participant.active()) throw new BusinessException(ErrorCode.PARTICIPANT_DELETED);
