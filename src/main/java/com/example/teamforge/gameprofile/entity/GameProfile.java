@@ -11,6 +11,7 @@ import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.time.Instant;
 
 @Entity
 @Table(name = "game_profiles", uniqueConstraints =
@@ -34,6 +35,12 @@ public class GameProfile {
     private int baseScore;
 
     private Integer manualScore;
+
+    private String riotPuuid;
+    private String riotTier;
+    private String riotDivision;
+    private Integer riotLeaguePoints;
+    private Instant riotUpdatedAt;
 
     @ElementCollection
     @Enumerated(EnumType.STRING)
@@ -76,6 +83,13 @@ public class GameProfile {
     public void update(String accountId, Integer manualScore, Set<Position> preferredPositions) {
         changePreferredPositions(preferredPositions);
         overrideScore(manualScore);
+        if (!Objects.equals(this.accountId, accountId)) {
+            riotPuuid = null;
+            riotTier = null;
+            riotDivision = null;
+            riotLeaguePoints = null;
+            riotUpdatedAt = null;
+        }
         this.accountId = accountId;
     }
 
@@ -90,5 +104,15 @@ public class GameProfile {
         if (score < 0) throw new BusinessException(ErrorCode.INVALID_SCORE);
         this.baseScore = score;
         return this;
+    }
+
+    public void refreshRiotRank(String puuid, String tier, String division, Integer leaguePoints,
+                                int score, Instant updatedAt) {
+        refreshScore(score);
+        riotPuuid = Objects.requireNonNull(puuid);
+        riotTier = tier;
+        riotDivision = division;
+        riotLeaguePoints = leaguePoints;
+        riotUpdatedAt = Objects.requireNonNull(updatedAt);
     }
 }
