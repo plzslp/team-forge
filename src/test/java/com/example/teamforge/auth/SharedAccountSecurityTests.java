@@ -14,6 +14,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -50,7 +51,28 @@ class SharedAccountSecurityTests {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/swagger-ui.html", "/h2-console/"})
+    @ValueSource(strings = {"/", "/index.html"})
+    void unauthenticatedRequestsCanOpenFrontend(String path) throws Exception {
+        // when / then
+        mvc.perform(get(path)).andExpect(status().isOk()).andExpect(unauthenticated());
+    }
+
+    @Test
+    void unauthenticatedRequestsCanLoadFrontendAssets() throws Exception {
+        // given
+        String index = mvc.perform(get("/index.html")).andReturn().getResponse().getContentAsString();
+        List<String> assets = Pattern.compile("(?:src|href)=\"(/assets/[^\"]+\\.(?:js|css))\"").matcher(index)
+                .results().map(result -> result.group(1)).toList();
+
+        // when / then
+        assertFalse(assets.isEmpty());
+        for (String asset : assets) {
+            mvc.perform(get(asset)).andExpect(status().isOk()).andExpect(unauthenticated());
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/swagger-ui.html", "/swagger-ui/index.html", "/v3/api-docs", "/h2-console/"})
     void protectedPagesRedirectToLogin(String path) throws Exception {
         // when / then
         mvc.perform(get(path)).andExpect(status().isFound())
