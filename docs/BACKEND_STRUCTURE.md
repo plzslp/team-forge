@@ -9,15 +9,21 @@ TeamForge 백엔드는 Java 17과 Spring Boot를 사용하는 단일 Gradle 프�
 | `match` | 팀 편성, 경기 확정과 스냅샷 저장, 결과 입력·조회 |
 | `external.riot` | WebClient 기반 Riot 계정·솔로랭크 조회 |
 | `common.exception` | 공통 오류 응답 |
+| `auth` | 공유 계정 로그인과 세션·CSRF 보호 |
 
 기본 `dev` 프로필은 메모리 H2와 로컬 H2 Console을 사용합니다. `prod`는 환경 변수로 PostgreSQL에 연결합니다. Flyway가 스키마를 관리하고 JPA는 매핑을 검증합니다. 운영 PostgreSQL의 실제 연결과 잠금 검증은 환경 구성 후 수행합니다.
 
 ## API
 
+`/login`에서 공유 계정으로 로그인하면 세션으로 API에 접근할 수 있습니다. `GET /api/auth/me`는 로그인한 계정을 반환하고, `GET /api/auth/csrf`는 변경 요청에 필요한 `XSRF-TOKEN` 쿠키를 준비합니다. 변경 요청과 `POST /logout`에는 쿠키 값을 `X-XSRF-TOKEN` 헤더로 보냅니다. Swagger UI는 로그인 후 이 헤더를 자동으로 붙입니다.
+
+`TEAMFORGE_AUTH_USERNAME`과 `TEAMFORGE_AUTH_PASSWORD`를 환경 변수로 설정합니다. 서버 시작 시 비밀번호를 BCrypt로 해싱해 메모리 계정에 등록합니다. 개발 환경은 루트 `.env`에서도 값을 읽습니다. 계정 설정이 없으면 서버가 시작되지 않습니다. 공유 비밀번호를 교체할 때는 환경 변수를 갱신하고 서버를 재시작해 기존 세션을 종료합니다.
+
 요청과 응답의 전체 스키마는 [Swagger UI](http://127.0.0.1:8080/swagger-ui.html)에서 확인할 수 있습니다.
 
 | 기능 | 경로 |
 | --- | --- |
+| 로그인 계정·CSRF 쿠키 | `GET /api/auth/me`, `GET /api/auth/csrf` |
 | 참가자 등록·목록 | `POST /api/participants`, `GET /api/participants` |
 | 참가자 상세·이름 수정·삭제 | `GET/PATCH/DELETE /api/participants/{id}` |
 | 게임 프로필 조회·전체 수정 | `GET/PUT /api/participants/{id}/profiles/{game}` |

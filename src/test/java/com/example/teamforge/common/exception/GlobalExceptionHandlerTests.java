@@ -1,5 +1,6 @@
 package com.example.teamforge.common.exception;
 
+import com.example.teamforge.support.AuthenticatedMockMvc;
 import com.example.teamforge.participant.entity.Participant;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -27,6 +28,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(GlobalExceptionHandlerTests.TestController.class)
+@AuthenticatedMockMvc
 @Import({GlobalExceptionHandler.class, GlobalExceptionHandlerTests.TestController.class})
 class GlobalExceptionHandlerTests {
     @Autowired MockMvc mvc;
