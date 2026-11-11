@@ -17,7 +17,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import com.example.teamforge.support.AuthenticatedMockMvc;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.hamcrest.Matchers.nullValue;
 
 @SpringBootTest(properties = "spring.datasource.url=jdbc:h2:mem:riot-profile-api-test;DB_CLOSE_DELAY=-1")
-@AutoConfigureMockMvc
+@AuthenticatedMockMvc
 class RiotProfileApiTests {
     @Autowired MockMvc mvc;
     @Autowired EntityManager em;

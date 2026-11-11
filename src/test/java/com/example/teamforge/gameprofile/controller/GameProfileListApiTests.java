@@ -14,7 +14,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import com.example.teamforge.support.AuthenticatedMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "logging.level.org.hibernate.stat=OFF",
         "logging.level.org.hibernate.engine.internal.StatisticalLoggingSessionEventListener=OFF"
 })
-@AutoConfigureMockMvc
+@AuthenticatedMockMvc
 @Transactional
 class GameProfileListApiTests {
     @Autowired MockMvc mvc;

@@ -9,3 +9,20 @@ spring:
 
 riot:
   api-key: ${RIOT_APIKEY:}
+
+teamforge:
+  auth:
+    username: ${TEAMFORGE_AUTH_USERNAME:}
+    password: ${TEAMFORGE_AUTH_PASSWORD:}
+
+server:
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+
+springdoc:
+  swagger-ui:
+    csrf:
+      enabled: true
