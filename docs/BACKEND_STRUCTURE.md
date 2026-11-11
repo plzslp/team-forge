@@ -7,9 +7,10 @@ TeamForge 백엔드는 Java 17과 Spring Boot를 사용하는 단일 Gradle 프�
 | `participant` | 참가자 등록, 이름 수정, 조회, 논리 삭제 |
 | `gameprofile` | 게임별 계정·선호 포지션·점수 관리 |
 | `match` | 팀 편성, 경기 확정과 스냅샷 저장, 결과 입력·조회 |
+| `external.riot` | WebClient 기반 Riot 계정·솔로랭크 조회 |
 | `common.exception` | 공통 오류 응답 |
 
-로컬 실행과 테스트는 H2를 사용합니다. Flyway가 스키마를 관리하고 JPA는 매핑을 검증합니다. 운영 PostgreSQL 연결과 잠금 검증은 후속 작업입니다.
+기본 `dev` 프로필은 메모리 H2와 로컬 H2 Console을 사용합니다. `prod`는 환경 변수로 PostgreSQL에 연결합니다. Flyway가 스키마를 관리하고 JPA는 매핑을 검증합니다. 운영 PostgreSQL의 실제 연결과 잠금 검증은 환경 구성 후 수행합니다.
 
 ## API
 
@@ -20,6 +21,7 @@ TeamForge 백엔드는 Java 17과 Spring Boot를 사용하는 단일 Gradle 프�
 | 참가자 등록·목록 | `POST /api/participants`, `GET /api/participants` |
 | 참가자 상세·이름 수정·삭제 | `GET/PATCH/DELETE /api/participants/{id}` |
 | 게임 프로필 조회·전체 수정 | `GET/PUT /api/participants/{id}/profiles/{game}` |
+| 롤 솔로랭크 갱신 | `POST /api/participants/{participantId}/profiles/LOL/refresh` |
 | 게임별 프로필 목록 | `GET /api/game-profiles?game=LOL` |
 | 팀 편성 미리보기 | `POST /api/team-previews` |
 | 경기 확정 | `POST /api/matches` |
@@ -41,3 +43,11 @@ TeamForge 백엔드는 Java 17과 Spring Boot를 사용하는 단일 Gradle 프�
 결과 수정은 같은 버전을 읽은 트랜잭션이 서로 다른 결과를 저장하려 할 때 낙관적 잠금으로 충돌을 감지합니다. 충돌 요청은 409 `CONCURRENT_MODIFICATION`을 반환합니다. 이전 트랜잭션이 완료된 뒤 새로 읽고 쓰는 요청은 기존 결과를 교체합니다.
 
 오류 응답은 `code`와 `message`를 반환합니다. 잘못된 입력은 400, 리소스가 없으면 404, 버전·잠금 충돌은 409입니다.
+
+## Riot 연동
+
+롤 프로필의 `accountId`에 Riot ID(`이름#태그`)를 등록한 뒤 갱신 API를 호출합니다. 한국 서버 기준으로 Account API(`asia`)에서 PUUID를 얻고 League API(`kr`)에서 `RANKED_SOLO_5x5`를 조회합니다. 프로필 응답의 `riotRank`에 티어·디비전·LP·조회 시각을 반환합니다. 조회 전은 `riotRank: null`, 정상 조회된 언랭크는 티어·디비전·LP가 null입니다.
+
+환산 점수는 Iron~Diamond에서 `티어 인덱스 × 400 + 디비전 단계 × 100 + LP`입니다. 티어 인덱스는 Iron 0부터 Diamond 6까지, 디비전 단계는 IV 0부터 I 3까지입니다. Master·Grandmaster·Challenger는 각각 2800·3000·3200에 LP를 더합니다. 정상 조회된 언랭크의 환산 점수는 0이며 수동 점수는 유지합니다. 계정 변경 시 기존 Riot 조회 정보는 비워지고 환산 점수는 다음 정상 갱신 때 교체됩니다.
+
+외부 호출은 DB 트랜잭션 밖에서 수행하고 저장 시 버전·활성 상태를 재검증합니다. 인증·호출 제한은 503, 통신·응답 오류와 5초 시간 초과는 502입니다. 외부 실패 시 기존 조회 정보와 점수를 보존합니다. 429 응답 이후에는 해당 서버 프로세스가 `Retry-After` 동안 Riot 호출을 중단합니다.
