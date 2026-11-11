@@ -24,7 +24,7 @@ export default function ProfileEditor(props: Props) {
   const { data, loading, error } = useQuery<Profile>(
     participant ? `/api/participants/${participant.id}/profiles/${game}` : null, retry,
   );
-  const loadError = error != null && !(error instanceof ApiError && error.status === 404);
+  const loadError = error != null && !(error instanceof ApiError && error.code === 'GAME_PROFILE_NOT_FOUND');
 
   useEffect(() => { dialog.current?.showModal(); }, []);
 
@@ -133,7 +133,7 @@ function EditorForm({ game, participant, initialProfile, onChange, onDelete, bus
   const rank = profile?.riotRank;
   return (
     <>
-      <form onSubmit={save} aria-busy={busy}>
+      <form onSubmit={save} onChange={() => setError('')} aria-busy={busy}>
         <fieldset className="editor-fields" disabled={busy}>
           <label>닉네임<input required maxLength={20} value={name} onChange={event => setName(event.target.value)} /></label>
           <label>{game === 'LOL' ? 'Riot ID' : '게임 계정'}

@@ -168,7 +168,9 @@ class GameProfileApiTests {
         em.clear();
         String body = "{\"preferredPositions\":[\"LOL_TOP\"]}";
         // when / then: 없는 리소스는 404, 삭제된 참여자의 변경은 409를 반환한다.
-        for (UUID id : new UUID[]{UUID.randomUUID(), active.getId(), deleted.getId()}) {
+        mvc.perform(get(path(active.getId(), "LOL"))).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("GAME_PROFILE_NOT_FOUND"));
+        for (UUID id : new UUID[]{UUID.randomUUID(), deleted.getId()}) {
             mvc.perform(get(path(id, "LOL"))).andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
         }

@@ -11,12 +11,12 @@ import java.util.List;
 import java.util.UUID;
 
 /** 경기 기록의 목록·상세 조회. 결과 미입력(null)과 0:0 무승부를 구분한다. */
-public record MatchResponse(UUID id, Game game, Instant createdAt, List<MatchTeamResponse> teams, long scoreDifference,
+public record MatchResponse(UUID id, Game game, Instant createdAt, List<MatchTeamResponse> teams, long scoreDifference, long version,
                             @Schema(description = "미입력은 null, 입력된 0:0은 무승부", nullable = true) ResultResponse result) {
     public static MatchResponse from(Match match) {
         List<MatchTeamResponse> teams = MatchTeamResponse.from(match);
         return new MatchResponse(match.getId(), match.getGame(), match.getCreatedAt(), teams,
-                Math.abs(teams.get(0).totalScore() - teams.get(1).totalScore()), ResultResponse.from(match.getResult()));
+                Math.abs(teams.get(0).totalScore() - teams.get(1).totalScore()), match.getVersion(), ResultResponse.from(match.getResult()));
     }
 
     public record ResultResponse(int scoreA, int scoreB, String memo, MatchResult.Outcome outcomeA, MatchResult.Outcome outcomeB) {

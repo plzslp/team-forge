@@ -10,6 +10,15 @@ import { useTheme } from './useTheme';
 const sections = ['팀 편성', '참가자 관리', '경기 기록'] as const;
 type Section = (typeof sections)[number];
 
+function createConfirmationKey() {
+  // 로컬 네트워크의 HTTP에서도 사용할 수 있는 난수 기반 UUID v4.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
+}
+
 export default function Workspace({ username, onLogout }: { username: string; onLogout: () => Promise<void> }) {
   const { theme, toggleTheme } = useTheme();
   const [section, setSection] = useState<Section>('팀 편성');
@@ -26,6 +35,7 @@ export default function Workspace({ username, onLogout }: { username: string; on
   const [error, setError] = useState('');
   const [scrollVersion, setScrollVersion] = useState(0);
   const results = useRef<HTMLElement>(null);
+  const confirmation = useRef<{ draft: Preview; allowNonPreferredPositions: boolean; key: string } | null>(null);
   const managing = section === '참가자 관리';
   const showingHistory = section === '경기 기록';
 
@@ -39,6 +49,7 @@ export default function Workspace({ username, onLogout }: { username: string; on
   }, [scrollVersion]);
 
   function resetDraft() {
+    confirmation.current = null;
     setDraft(null);
     setSwapId(null);
     setOfferNonPreferred(false);
@@ -111,7 +122,10 @@ export default function Workspace({ username, onLogout }: { username: string; on
     clearMessages();
     setBusy(true);
     try {
-      await api.confirm(game, draft, allowNonPreferredPositions);
+      if (confirmation.current?.draft !== draft || confirmation.current.allowNonPreferredPositions !== allowNonPreferredPositions) {
+        confirmation.current = { draft, allowNonPreferredPositions, key: createConfirmationKey() };
+      }
+      await api.confirm(game, draft, allowNonPreferredPositions, confirmation.current.key);
       resetDraft();
       setSelected([]);
       setSection('경기 기록');

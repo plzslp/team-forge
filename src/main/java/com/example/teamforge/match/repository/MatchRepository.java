@@ -37,4 +37,7 @@ public interface MatchRepository extends JpaRepository<Match, UUID> {
 
     @Query("select distinct m from Match m left join fetch m.participants where m.id = :id")
     Optional<Match> findWithParticipantsById(@Param("id") UUID id);
+
+    @Query("select distinct m from Match m left join fetch m.participants where m.confirmationKey = :key")
+    Optional<Match> findByConfirmationKey(@Param("key") UUID key);
 }

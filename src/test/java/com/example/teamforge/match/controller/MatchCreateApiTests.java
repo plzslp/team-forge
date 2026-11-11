@@ -29,6 +29,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -369,6 +370,27 @@ class MatchCreateApiTests {
                 .andExpect(jsonPath("$.components.schemas.MatchParticipantRequest.properties.score").doesNotExist());
     }
 
+    @Test
+    void replaysTheOriginalConfirmationAndRejectsDifferentInputForTheSameKey() throws Exception {
+        // given: 최초 확정을 저장하고 참가자 정보가 이후 변경된다.
+        MatchCreateRequest request = preview(Game.LOL, false);
+        UUID key = UUID.randomUUID();
+        String original = perform(request, key).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        em.find(Participant.class, request.participants().get(0).participantId()).rename("확정 이후 이름");
+        em.flush();
+        em.clear();
+        List<MatchParticipantRequest> members = new ArrayList<>(request.participants());
+        Collections.reverse(members);
+        MatchCreateRequest reordered = copy(request, members, request.participantVersions(), false);
+
+        // when / then: 같은 편성은 원래 스냅샷을 반환하고 다른 편성에 키를 재사용할 수 없다.
+        perform(reordered, key).andExpect(status().isCreated()).andExpect(content().json(original));
+        perform(copy(request, request.participants(), request.participantVersions(), true), key)
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"));
+        assertEquals(1L, countMatches());
+        assertEquals(10L, countSnapshots());
+    }
+
     private MatchCreateRequest preview(Game game, boolean singleRole) {
         List<UUID> ids = new ArrayList<>();
         Set<Position> positions = singleRole ? Set.of(game.teamPositions().get(0)) : Set.copyOf(game.teamPositions());
@@ -396,6 +418,11 @@ class MatchCreateApiTests {
 
     private ResultActions perform(MatchCreateRequest request) throws Exception {
         return mvc.perform(post("/api/matches").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(request)));
+    }
+
+    private ResultActions perform(MatchCreateRequest request, UUID key) throws Exception {
+        return mvc.perform(post("/api/matches").header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(request)));
     }
 
     private GameProfile profile(UUID id, Game game) {

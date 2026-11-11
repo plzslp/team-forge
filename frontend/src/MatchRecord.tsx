@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { History } from 'lucide-react';
-import { api, errorMessage } from './api';
+import { api, ApiError, errorMessage } from './api';
 import { formatDate, games, positionLabels, type Game, type Match, type Page } from './domain';
 import PageControls from './PageControls';
 import { useQuery } from './useQuery';
@@ -28,10 +28,11 @@ export default function MatchHistory({ game, onCreate }: { game: Game; onCreate:
 
 function MatchRecord({ match }: { match: Match }) {
   const [expanded, setExpanded] = useState(false);
-  const [saved, setSaved] = useState<Match | null>(null);
+  const [saved, setSaved] = useState<{ source: Match; match: Match } | null>(null);
   const [retry, setRetry] = useState(0);
+  const [conflict, setConflict] = useState(false);
   const { data, error, loading } = useQuery<Match>(expanded ? `/api/matches/${match.id}` : null, retry);
-  const current = saved ?? data ?? match;
+  const current = data && saved?.source === data ? saved.match : data ?? saved?.match ?? match;
   const winner = current.result ? current.result.outcomeA === 'DRAW' ? '무승부'
     : current.result.outcomeA === 'WIN' ? 'A팀 승리' : 'B팀 승리' : '결과 미입력';
 
@@ -47,12 +48,20 @@ function MatchRecord({ match }: { match: Match }) {
         <strong>{team.team}팀 · {team.totalScore.toLocaleString()} PT</strong>
         <p>{team.participants.map(participant => participant.name).join(' · ')}</p>
       </div>)}
-      <details onToggle={event => { setExpanded(event.currentTarget.open); }}>
+      <details onToggle={event => {
+        const open = event.currentTarget.open;
+        if (!open && data) setSaved({ source: data, match: current });
+        setExpanded(open);
+        setConflict(false);
+      }}>
         <summary>상세 보기 · 경기 결과 입력</summary>
         {loading && <p role="status">상세 기록을 불러오는 중…</p>}
         {error != null && <div className="form-error" role="alert">{errorMessage(error)}
           <button className="secondary" onClick={() => setRetry(value => value + 1)}>다시 불러오기</button>
         </div>}
+        {expanded && conflict && <p className="form-error" role="alert">{data
+          ? '다른 곳에서 경기 결과가 변경되었습니다. 최신 결과를 확인한 뒤 다시 입력하세요.'
+          : '다른 곳에서 경기 결과가 변경되었습니다. 최신 결과를 불러와야 다시 저장할 수 있습니다.'}</p>}
         {expanded && data && <>
           <div className="record-rosters">{current.teams.map(team => <section key={team.team}>
             <h3>{team.team}팀</h3>
@@ -60,14 +69,22 @@ function MatchRecord({ match }: { match: Match }) {
               {positionLabels[member.assignedPosition]} · {member.name} · {member.score.toLocaleString()} PT
             </p>)}
           </section>)}</div>
-          <ResultForm match={current} onSaved={setSaved} />
+          <ResultForm match={current} onSaved={updated => {
+            setSaved({ source: data, match: updated });
+            setConflict(false);
+          }} onConflict={() => {
+            setConflict(true);
+            setRetry(value => value + 1);
+          }} />
         </>}
       </details>
     </div>
   </article>;
 }
 
-function ResultForm({ match, onSaved }: { match: Match; onSaved: (match: Match) => void }) {
+function ResultForm({ match, onSaved, onConflict }: {
+  match: Match; onSaved: (match: Match) => void; onConflict: () => void;
+}) {
   const [a, setA] = useState(String(match.result?.scoreA ?? ''));
   const [b, setB] = useState(String(match.result?.scoreB ?? ''));
   const [memo, setMemo] = useState(match.result?.memo ?? '');
@@ -82,16 +99,21 @@ function ResultForm({ match, onSaved }: { match: Match; onSaved: (match: Match) 
     setError('');
     setSaved(false);
     try {
-      onSaved(await api.saveResult(match.id, { scoreA: Number(a), scoreB: Number(b), memo }));
+      const updated = await api.saveResult(match.id, { scoreA: Number(a), scoreB: Number(b), memo }, match.version);
+      setA(String(updated.result?.scoreA ?? ''));
+      setB(String(updated.result?.scoreB ?? ''));
+      setMemo(updated.result?.memo ?? '');
+      onSaved(updated);
       setSaved(true);
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (cause instanceof ApiError && cause.code === 'CONCURRENT_MODIFICATION') onConflict();
+      else setError(errorMessage(cause));
     } finally {
       setBusy(false);
     }
   }
 
-  return <form onSubmit={save} onChange={() => setSaved(false)} aria-busy={busy}>
+  return <form onSubmit={save} onChange={() => { setSaved(false); setError(''); }} aria-busy={busy}>
     <fieldset className="editor-fields" disabled={busy}>
       <div className="score-inputs">
         <label>A팀 스코어<input required type="number" min="0" max="2147483647" step="1" value={a}

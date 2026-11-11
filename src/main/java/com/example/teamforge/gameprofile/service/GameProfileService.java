@@ -64,7 +64,7 @@ public class GameProfileService {
         participantRepository.findByIdAndDeletedAtIsNull(participantId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         return GameProfileResponse.from(gameProfileRepository.findByParticipantIdAndGame(participantId, game)
-                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND)));
+                .orElseThrow(() -> new BusinessException(ErrorCode.GAME_PROFILE_NOT_FOUND)));
     }
 
     @Transactional

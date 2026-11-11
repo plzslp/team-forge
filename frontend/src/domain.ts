@@ -56,6 +56,7 @@ export type Match = {
   createdAt: string;
   teams: Roster[];
   scoreDifference: number;
+  version: number;
   result: (ResultInput & { outcomeA: Outcome; outcomeB: Outcome }) | null;
 };
 export type ParticipantMatch = {

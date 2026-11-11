@@ -26,11 +26,18 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -58,6 +65,9 @@ public class MatchService {
     public MatchResponse recordResult(UUID id, MatchResultRequest request) {
         Match match = matchRepository.findWithParticipantsById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (request.expectedVersion() != null && !request.expectedVersion().equals(match.getVersion())) {
+            throw new BusinessException(ErrorCode.CONCURRENT_MODIFICATION);
+        }
         match.recordResult(new MatchResult(request.scoreA(), request.scoreB(), request.memo()));
         // 응답을 만들기 전에 버전 충돌을 확인한다. 변경이 없으면 UPDATE 없이 성공한다.
         matchRepository.flush();
@@ -89,20 +99,32 @@ public class MatchService {
         return MatchResponse.from(match);
     }
 
+    @Transactional
+    public MatchCreateResponse create(MatchCreateRequest request) {
+        return create(request, null);
+    }
+
     /**
      * 최종 편성을 현재 DB 정보로 검증하고 이름·점수·포지션·팀을 스냅샷으로 저장한다.
      * 참가자 → 프로필 순서로 잠금을 잡아 검증부터 트랜잭션 종료까지 수정·삭제와의 경쟁을 막는다.
      *
      * @param request 최종 편성과 미리보기 당시 버전, 비선호 배정 허용 여부
+     * @param confirmationKey 동일한 확정 요청을 식별하는 선택적 키
      * @return 생성한 경기 ID·시각과 확정 스냅샷
      * @throws BusinessException 입력·역할 구성이 잘못됐거나, 미리보기 정보가 오래됐거나, 비선호 배정이 미허용인 경우
      */
     @Transactional
-    public MatchCreateResponse create(MatchCreateRequest request) {
+    public MatchCreateResponse create(MatchCreateRequest request, UUID confirmationKey) {
         List<UUID> ids = validateRequest(request);
+        String fingerprint = confirmationKey == null ? null : confirmationFingerprint(request);
+        Optional<MatchCreateResponse> replay = findConfirmation(confirmationKey, fingerprint);
+        if (replay.isPresent()) return replay.orElseThrow();
 
         // 삭제된 행도 잠근 후 활성 상태를 검사해 미리보기 재생성이 필요한 경우를 409로 통일한다.
         List<Participant> participants = participantRepository.findAllForMatchConfirmation(ids);
+        // 같은 요청은 같은 참가자 행을 잠근다. 대기 중 확정이 완료됐을 수 있다.
+        replay = findConfirmation(confirmationKey, fingerprint);
+        if (replay.isPresent()) return replay.orElseThrow();
         if (participants.size() != 10 || participants.stream().anyMatch(participant -> !participant.active())) {
             throw new BusinessException(ErrorCode.PREVIEW_OUTDATED);
         }
@@ -138,8 +160,38 @@ public class MatchService {
             throw new BusinessException(ErrorCode.NON_PREFERRED_POSITION_NOT_ALLOWED);
         }
 
-        Match match = new Match(UUID.randomUUID(), request.game(), Instant.now(), snapshots, null);
+        Instant createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        Match match = new Match(UUID.randomUUID(), request.game(), createdAt, snapshots, null, confirmationKey, fingerprint);
         return MatchCreateResponse.from(matchRepository.saveAndFlush(match));
+    }
+
+    private Optional<MatchCreateResponse> findConfirmation(UUID confirmationKey, String fingerprint) {
+        if (confirmationKey == null) return Optional.empty();
+        return matchRepository.findByConfirmationKey(confirmationKey).map(match -> {
+            if (!fingerprint.equals(match.getConfirmationFingerprint())) {
+                throw new BusinessException(ErrorCode.IDEMPOTENCY_KEY_REUSED);
+            }
+            return MatchCreateResponse.from(match);
+        });
+    }
+
+    private String confirmationFingerprint(MatchCreateRequest request) {
+        StringBuilder canonical = new StringBuilder().append(request.game()).append('|')
+                .append(request.allowNonPreferredPositions());
+        List<MatchParticipantRequest> members = request.participants().stream()
+                .sorted(Comparator.comparing(MatchParticipantRequest::participantId)).toList();
+        for (MatchParticipantRequest member : members) {
+            ParticipantVersions versions = request.participantVersions().get(member.participantId());
+            canonical.append('|').append(member.participantId()).append('|').append(member.team())
+                    .append('|').append(member.assignedPosition()).append('|').append(versions.participantVersion())
+                    .append('|').append(versions.profileVersion());
+        }
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 digest is unavailable", exception);
+        }
     }
 
     private List<UUID> validateRequest(MatchCreateRequest request) {

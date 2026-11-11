@@ -44,7 +44,7 @@ async function sessionCsrfToken() {
   return token;
 }
 
-const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) });
+const json = (method: string, body: unknown, headers?: HeadersInit): RequestInit => ({ method, body: JSON.stringify(body), headers });
 const participantPath = (id: string) => `/api/participants/${encodeURIComponent(id)}`;
 const profilePath = (id: string, game: Game) => `${participantPath(id)}/profiles/${game}`;
 
@@ -96,7 +96,7 @@ export const api = {
   refreshRank: (id: string) => request<Profile>(`${profilePath(id, 'LOL')}/refresh`, { method: 'POST' }),
   preview: (game: Game, participantIds: string[], allowNonPreferredPositions: boolean) =>
     request<Preview>('/api/team-previews', json('POST', { game, participantIds, allowNonPreferredPositions })),
-  confirm: (game: Game, preview: Preview, allowNonPreferredPositions: boolean) =>
+  confirm: (game: Game, preview: Preview, allowNonPreferredPositions: boolean, confirmationKey: string) =>
     request<{ id: string }>('/api/matches', json('POST', {
       game,
       participants: preview.teams.flatMap(({ team, participants }) => participants.map(({ participantId, assignedPosition }) => ({
@@ -104,9 +104,9 @@ export const api = {
       }))),
       participantVersions: preview.participantVersions,
       allowNonPreferredPositions,
-    })),
-  saveResult: (id: string, result: ResultInput) =>
-    request<Match>(`/api/matches/${encodeURIComponent(id)}/result`, json('PUT', result)),
+    }, { 'Idempotency-Key': confirmationKey })),
+  saveResult: (id: string, result: ResultInput, expectedVersion: number) =>
+    request<Match>(`/api/matches/${encodeURIComponent(id)}/result`, json('PUT', { ...result, expectedVersion })),
 };
 
 export function errorMessage(error: unknown) {

@@ -39,7 +39,7 @@ public abstract class GameProfileApi {
             @ApiResponse(responseCode = "200", description = "조회 완료"),
             @ApiResponse(responseCode = "400", description = "잘못된 UUID 또는 게임",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "참여자·프로필이 없거나 참여자가 삭제됨",
+            @ApiResponse(responseCode = "404", description = "프로필 없음: GAME_PROFILE_NOT_FOUND, 참여자 없음·삭제: RESOURCE_NOT_FOUND",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class)))
     })
     public abstract ResponseEntity<GameProfileResponse> findByParticipantIdAndGame(UUID participantId, Game game);

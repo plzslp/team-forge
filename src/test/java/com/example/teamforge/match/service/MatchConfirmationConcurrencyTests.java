@@ -15,6 +15,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -166,6 +167,40 @@ class MatchConfirmationConcurrencyTests {
                 assertEquals(0L, em.createQuery("select count(m) from Match m", Long.class).getSingleResult());
                 assertEquals(0L, em.createQuery("select count(p) from MatchParticipant p", Long.class).getSingleResult());
             });
+        } finally {
+            allowCommit.countDown();
+        }
+    }
+
+    @Test
+    void concurrentRetryReturnsTheCommittedConfirmation() throws Exception {
+        // given: 첫 확정이 저장됐지만 아직 커밋되거나 응답하지 않았다.
+        UUID key = UUID.randomUUID();
+        CountDownLatch saved = new CountDownLatch(1);
+        CountDownLatch allowCommit = new CountDownLatch(1);
+        CompletableFuture<Integer> firstSession = new CompletableFuture<>();
+        CompletableFuture<Integer> retrySession = new CompletableFuture<>();
+        Future<MatchCreateResponse> first = workers.submit(() -> transaction().execute(status -> {
+            firstSession.complete(currentSessionId());
+            MatchCreateResponse response = matchService.create(request, key);
+            saved.countDown();
+            await(allowCommit);
+            return response;
+        }));
+        try {
+            assertTrue(saved.await(5, TimeUnit.SECONDS));
+
+            // when: 같은 키로 재시도하면 첫 확정이 잡은 참가자 잠금을 기다린다.
+            Future<MatchCreateResponse> retry = workers.submit(() -> transaction().execute(status -> {
+                retrySession.complete(currentSessionId());
+                return matchService.create(request, key);
+            }));
+            awaitDatabaseLock(retrySession.get(5, TimeUnit.SECONDS), firstSession.get(5, TimeUnit.SECONDS), retry);
+            allowCommit.countDown();
+
+            // then: 동일한 최초 응답을 반환하고 경기는 한 건만 저장한다.
+            assertEquals(first.get(5, TimeUnit.SECONDS), retry.get(5, TimeUnit.SECONDS));
+            assertEquals(1L, jdbc.queryForObject("select count(*) from matches", Long.class));
         } finally {
             allowCommit.countDown();
         }

@@ -15,7 +15,8 @@ public record MatchResultRequest(
         @NotNull @Min(0) @Schema(description = "A팀 경기 스코어", minimum = "0") Integer scoreA,
         @JsonDeserialize(using = ScoreDeserializer.class)
         @NotNull @Min(0) @Schema(description = "B팀 경기 스코어", minimum = "0") Integer scoreB,
-        @Size(max = 2000) @Schema(description = "경기 메모. 생략·null은 빈 문자열로 저장", maxLength = 2000) String memo
+        @Size(max = 2000) @Schema(description = "경기 메모. 생략·null은 빈 문자열로 저장", maxLength = 2000) String memo,
+        @Min(0) @Schema(description = "상세 조회 당시 경기 버전. 생략 시 기존 저장 방식 적용") Long expectedVersion
 ) {
     public static class ScoreDeserializer extends ValueDeserializer<Integer> {
         @Override
