@@ -83,6 +83,25 @@ class MatchResultApiTests {
         putResult(id, "{\"scoreA\":0,\"scoreB\":0}").andExpect(status().isOk());
     }
 
+    @Test
+    void rejectsResultBasedOnAnOlderVersionAfterAnotherSave() throws Exception {
+        // given: 두 편집자가 같은 버전을 조회한다.
+        UUID id = persistMatch(Game.LOL);
+        long version = em.find(Match.class, id).getVersion();
+        mvc.perform(get("/api/matches/" + id)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value((int) version));
+        putResult(id, "{\"scoreA\":3,\"scoreB\":1,\"expectedVersion\":" + version + "}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.version").value((int) version + 1));
+        em.clear();
+
+        // when: 두 번째 편집자가 최초 조회 버전으로 저장한다.
+        putResult(id, "{\"scoreA\":1,\"scoreB\":2,\"expectedVersion\":" + version + "}")
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("CONCURRENT_MODIFICATION"));
+
+        // then: 첫 번째 편집자의 결과가 유지된다.
+        assertEquals(3, em.find(Match.class, id).getResult().getScoreA());
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"null", "\"\"", "\"메모\""})
     void acceptsOptionalMemo(String memo) throws Exception {

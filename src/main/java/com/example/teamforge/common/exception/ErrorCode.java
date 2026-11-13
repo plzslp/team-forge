@@ -17,6 +17,7 @@ public enum ErrorCode {
 
     INVALID_PARTICIPANT_NAME(HttpStatus.BAD_REQUEST, "이름은 공백이 아닌 1~20자여야 합니다."),
     PARTICIPANT_DELETED(HttpStatus.CONFLICT, "삭제된 참여자는 수정할 수 없습니다."),
+    GAME_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "이 게임의 프로필을 찾을 수 없습니다."),
     INVALID_PREFERRED_POSITION(HttpStatus.BAD_REQUEST, "게임에 맞는 선호 포지션을 하나 이상 선택하세요."),
     INVALID_SCORE(HttpStatus.BAD_REQUEST, "점수는 음수일 수 없습니다."),
     INVALID_RIOT_ID(HttpStatus.BAD_REQUEST, "롤 프로필에 올바른 Riot ID(이름#태그)를 등록하세요."),
@@ -35,6 +36,7 @@ public enum ErrorCode {
     PREFERRED_POSITION_UNAVAILABLE(HttpStatus.CONFLICT, "선호 포지션만으로 편성할 수 없습니다. 비선호 배정 허용 후 다시 요청하세요."),
     INVALID_TEAM_POSITIONS(HttpStatus.BAD_REQUEST, "각 팀의 게임별 포지션 구성을 확인하세요."),
     PREVIEW_OUTDATED(HttpStatus.CONFLICT, "참가자 정보가 변경되었거나 사용할 수 없습니다. 팀 미리보기를 다시 생성하세요."),
+    IDEMPOTENCY_KEY_REUSED(HttpStatus.CONFLICT, "같은 확정 키로 다른 팀 편성을 저장할 수 없습니다."),
     NON_PREFERRED_POSITION_NOT_ALLOWED(HttpStatus.CONFLICT, "비선호 포지션 배정을 허용한 뒤 확정하세요.");
 
     private final HttpStatus status;

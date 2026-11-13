@@ -48,6 +48,7 @@ public class SecurityConfig {
         return http
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                        .requestMatchers("/", "/index.html", "/assets/**").permitAll()
                         .requestMatchers("/h2-console/**").denyAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(errors -> errors

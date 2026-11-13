@@ -39,17 +39,30 @@ public class Match {
     @Embedded
     private MatchResult result;
 
+    @Column(unique = true)
+    private UUID confirmationKey;
+
+    @Column(length = 64)
+    private String confirmationFingerprint;
+
     @Version
     private Long version;
 
     /** 최신 정보·팀별 역할·비선호 허용은 확정 서비스에서 검증한 뒤 생성한다. */
     public Match(UUID id, Game game, Instant createdAt, List<MatchParticipant> participants, MatchResult result) {
+        this(id, game, createdAt, participants, result, null, null);
+    }
+
+    public Match(UUID id, Game game, Instant createdAt, List<MatchParticipant> participants, MatchResult result,
+                 UUID confirmationKey, String confirmationFingerprint) {
         this.id = Objects.requireNonNull(id);
         this.game = Objects.requireNonNull(game);
         this.createdAt = Objects.requireNonNull(createdAt);
         validateTeams(game, participants);
         participants.forEach(p -> this.participants.add(p.copyForMatch()));
         this.result = result;
+        this.confirmationKey = confirmationKey;
+        this.confirmationFingerprint = confirmationFingerprint;
     }
 
     public List<MatchParticipant> getParticipants() {

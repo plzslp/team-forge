@@ -82,7 +82,7 @@ class MatchQueryApiTests {
                 .andExpect(jsonPath("$.teams[1].totalScore").value(5L * Integer.MAX_VALUE))
                 .andExpect(jsonPath("$.scoreDifference").value((long) Integer.MAX_VALUE))
                 .andExpect(jsonPath("$.result").value(nullValue()))
-                .andExpect(jsonPath("$.version").doesNotExist())
+                .andExpect(jsonPath("$.version").value(0))
                 .andExpect(jsonPath("$.teams[*].participants[*].id").doesNotExist())
                 .andExpect(jsonPath("$.teams[*].participants[*].accountId").doesNotExist());
         if (game == Game.LOL) {

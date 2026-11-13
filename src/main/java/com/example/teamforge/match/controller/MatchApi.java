@@ -8,6 +8,7 @@ import com.example.teamforge.match.dto.request.MatchListRequest;
 import com.example.teamforge.match.dto.response.MatchPageResponse;
 import com.example.teamforge.match.dto.response.MatchResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -23,7 +24,7 @@ import java.util.UUID;
 public abstract class MatchApi {
     @Operation(summary = "경기 결과 입력·수정", description = "A/B팀 스코어와 메모를 전체 교체합니다. 스코어는 필수이며 0 이상입니다. "
             + "메모는 최대 2000자이며 생략·null은 빈 문자열로 저장합니다. 0:0도 입력된 무승부입니다. "
-            + "겹친 수정 트랜잭션의 버전 충돌은 409입니다. 클라이언트 버전 비교는 하지 않아 이전 수정 완료 후의 요청은 덮어씁니다.")
+            + "expectedVersion을 보내면 상세 조회 당시 버전과 비교합니다. 버전 불일치나 동시 수정은 409입니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "갱신된 경기 상세 스냅샷과 결과"),
             @ApiResponse(responseCode = "400", description = "잘못된 경기 UUID·필수 스코어 누락·음수·메모 길이 초과",
@@ -39,15 +40,16 @@ public abstract class MatchApi {
             + "수동 교체는 허용하지만 게임별 역할 구성과 비선호 배정 허용 여부를 다시 검증합니다. "
             + "이름·점수·생성 시각은 서버에서 결정하며 확정 당시 스냅샷을 저장합니다. "
             + "미리보기 이후 참가자·프로필이 바뀌었거나 삭제됐다면 409로 거절하고 재생성을 안내합니다. "
-            + "동일 요청을 다시 보내면 별도 경기로 생성합니다.")
+            + "동일한 Idempotency-Key와 편성으로 재시도하면 처음 저장한 경기 응답을 반환합니다. 키를 생략하면 별도 경기로 생성합니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "경기 생성 완료. 경기 ID·시각·확정 스냅샷과 상세 조회 Location 반환"),
             @ApiResponse(responseCode = "400", description = "잘못된 입력·중복 참가자·버전 집합·팀별 역할 구성",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "오래된 미리보기·사용 불가 참가자·비선호 배정 미허용·잠금 충돌",
+            @ApiResponse(responseCode = "409", description = "오래된 미리보기·사용 불가 참가자·비선호 배정 미허용·잠금 충돌·확정 키 재사용",
                     content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class)))
     })
-    public abstract ResponseEntity<MatchCreateResponse> create(MatchCreateRequest request);
+    public abstract ResponseEntity<MatchCreateResponse> create(MatchCreateRequest request,
+            @Parameter(description = "같은 경기 확정 재시도에 재사용하는 UUID", required = false) UUID confirmationKey);
 
     @Operation(summary = "경기 기록 목록 조회", description = "필수 game의 확정 기록을 생성 시각·ID 내림차순으로 조회합니다. "
             + "page 기본 0, size 기본 20(1~100)이며 정렬 변경은 지원하지 않습니다. "

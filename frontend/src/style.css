@@ -794,3 +794,42 @@ footer small {
     font-size: 10px;
   }
 }
+
+.header-user { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header-inner .theme-toggle { flex-shrink: 0; }
+.filters { flex-wrap: wrap; }
+.roster-views { padding-top: 12px; border-bottom: 1px solid var(--line); }
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  color: var(--muted);
+}
+.secondary:disabled { opacity: 0.55; }
+.retry { margin: 12px auto 0; }
+.form-error { color: #9d3030; line-height: 1.6; }
+.form-status { color: #22634e; line-height: 1.6; }
+.workspace-error { border: 1px solid #ecc5c5; padding: 12px; margin-bottom: 14px; }
+.workspace-error .secondary, .form-error .secondary { margin-top: 8px; white-space: normal; }
+.editor-fields { border: 0; min-width: 0; padding: 0; margin: 0; }
+dialog.modal { border: 1px solid var(--line); width: min(520px, calc(100% - 24px)); color: inherit; }
+dialog.modal::backdrop { background: #142033a0; }
+.editor-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.editor-actions .danger { color: #9d3030; }
+.participant-history { border-top: 1px solid var(--line); margin-top: 16px; }
+.participant-history ul { padding: 0; margin: 0; list-style: none; }
+.participant-history li {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.team button .non-preferred { display: block; color: #a24925; }
+.score-inputs label { min-width: 0; flex: 1; }
+[data-theme='dark'] :is(.form-error, .editor-actions .danger, .team button .non-preferred) { color: #ffb5b5; }
+[data-theme='dark'] .form-status { color: #8ed7bc; }
+[data-theme='dark'] .workspace-error { border-color: #79505a; }
