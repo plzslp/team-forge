@@ -2,6 +2,8 @@ package com.example.teamforge.external.riot;
 
 import com.example.teamforge.common.exception.BusinessException;
 import com.example.teamforge.common.exception.ErrorCode;
+import com.example.teamforge.gameprofile.entity.Game;
+import com.example.teamforge.gameprofile.entity.RankTier;
 
 import java.util.List;
 
@@ -10,18 +12,20 @@ public record RiotRank(String puuid, String tier, String division, Integer leagu
     public int score() {
         if (tier == null) return 0;
         if (leaguePoints == null || leaguePoints < 0) throw new BusinessException(ErrorCode.RIOT_UNAVAILABLE);
-        int base = switch (tier) {
-            case "MASTER" -> 2800;
-            case "GRANDMASTER" -> 3000;
-            case "CHALLENGER" -> 3200;
-            default -> {
-                int tierIndex = List.of("IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND").indexOf(tier);
-                int divisionIndex = List.of("IV", "III", "II", "I").indexOf(division == null ? "" : division);
-                if (tierIndex < 0 || divisionIndex < 0) throw new BusinessException(ErrorCode.RIOT_UNAVAILABLE);
-                yield tierIndex * 400 + divisionIndex * 100;
-            }
-        };
-        if ((long) base + leaguePoints > Integer.MAX_VALUE) throw new BusinessException(ErrorCode.RIOT_UNAVAILABLE);
+        RankTier rankTier;
+        try {
+            rankTier = RankTier.valueOf(tier);
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(ErrorCode.RIOT_UNAVAILABLE);
+        }
+        Integer base = rankTier.score(Game.LOL, null);
+        if (base == null) {
+            int divisionNumber = List.of("I", "II", "III", "IV").indexOf(division == null ? "" : division) + 1;
+            base = rankTier.score(Game.LOL, divisionNumber);
+        }
+        if (base == null || (long) base + leaguePoints > Integer.MAX_VALUE) {
+            throw new BusinessException(ErrorCode.RIOT_UNAVAILABLE);
+        }
         return base + leaguePoints;
     }
 }

@@ -2,10 +2,11 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Check, RefreshCw, Trash2, X } from 'lucide-react';
 import { api, ApiError, errorMessage } from './api';
 import {
-  formatDate, games, positionLabels, positions, type Game, type Page, type Participant,
-  type ParticipantMatch, type Position, type Profile,
+  formatDate, games, positionLabels, positions, rankDivisionCount, rankTiers, tiersByGame, type Game, type Page,
+  type Participant, type ParticipantMatch, type Position, type Profile, type RankTier,
 } from './domain';
 import PageControls from './PageControls';
+import RankBadge from './RankBadge';
 import { useQuery } from './useQuery';
 
 type Props = {
@@ -53,20 +54,21 @@ function EditorForm({ game, participant, initialProfile, onChange, onDelete, bus
   const [profile, setProfile] = useState(initialProfile);
   const [name, setName] = useState(participant?.name ?? '');
   const [accountId, setAccountId] = useState(initialProfile?.accountId ?? '');
-  const [manualScore, setManualScore] = useState(initialProfile?.manualScore?.toString() ?? '');
+  const legacyScore = profile?.manualRank == null ? profile?.manualScore ?? null : null;
+  const [tier, setTier] = useState<RankTier | 'legacy' | ''>(initialProfile?.manualRank?.tier ?? (legacyScore !== null ? 'legacy' : ''));
+  const [division, setDivision] = useState(initialProfile?.manualRank?.division ?? 0);
   const [preferred, setPreferred] = useState<Position[]>(initialProfile?.preferredPositions ?? [positions[game][0]]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+  const divisionCount = tier && tier !== 'legacy' ? rankDivisionCount(game, tier) : 0;
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
     const displayName = name.trim();
-    const score = manualScore === '' ? null : Number(manualScore);
-    if (!displayName || !preferred.length ||
-        (score !== null && (!Number.isInteger(score) || score < 0 || score > 2147483647))) {
-      setError('닉네임, 선호 포지션, 수동 점수를 확인하세요.');
+    if (!displayName || !preferred.length || (divisionCount > 0 && !division)) {
+      setError('닉네임, 선호 포지션, 디비전 선택을 확인하세요.');
       return;
     }
     setBusy(true);
@@ -85,7 +87,8 @@ function EditorForm({ game, participant, initialProfile, onChange, onDelete, bus
       }
       const updated = await api.saveProfile(record.id, game, {
         accountId: accountId.trim() || null,
-        manualScore: score,
+        manualScore: tier === 'legacy' ? legacyScore : null,
+        manualRank: tier && tier !== 'legacy' ? { tier, division: divisionCount ? division : null } : null,
         preferredPositions: preferred,
       });
       setProfile(updated);
@@ -143,21 +146,39 @@ function EditorForm({ game, participant, initialProfile, onChange, onDelete, bus
           {game === 'LOL' && (
             <section className="riot-lookup" aria-label="롤 솔로랭크">
               <h3>롤 솔로랭크</h3>
-              <p>{rank ? (rank.tier ? `${rank.tier} ${rank.division ?? ''} · ${rank.leaguePoints} LP` : '언랭크')
-                + ` · ${formatDate(rank.updatedAt)}` : 'Riot ID를 저장한 뒤 솔로랭크를 갱신할 수 있습니다.'}</p>
+              <p>{rank ? <>{rank.tier ? <><RankBadge game="LOL" tier={rank.tier} division={rank.division} />
+                {' · '}{rank.leaguePoints} LP</> : '언랭크'} · {formatDate(rank.updatedAt)}</>
+                : 'Riot ID를 저장한 뒤 솔로랭크를 갱신할 수 있습니다.'}</p>
               <button type="button" className="secondary" onClick={refresh}
                 disabled={!profile?.accountId || accountId.trim() !== profile.accountId}>
                 <RefreshCw size={15} />솔로랭크 갱신
               </button>
             </section>
           )}
-          <label>수동 점수
-            <input type="number" min="0" max="2147483647" step="1" value={manualScore}
-              onChange={event => setManualScore(event.target.value)} placeholder="미지정" />
-          </label>
+          <div className="rank-fields">
+            <label>편성용 수동 티어
+              <select value={tier} onChange={event => {
+                setTier(event.target.value as RankTier | 'legacy' | '');
+                setDivision(0);
+              }}>
+                <option value="">미지정</option>
+                {legacyScore !== null && <option value="legacy">기존 점수 유지 ({legacyScore.toLocaleString()} PT)</option>}
+                {tiersByGame[game].map(item => <option key={item} value={item}>{rankTiers[item]}</option>)}
+              </select>
+            </label>
+            {divisionCount > 0 && <label>디비전
+              <select required value={division || ''} onChange={event => setDivision(Number(event.target.value))}>
+                <option value="" disabled>선택</option>
+                {Array.from({ length: divisionCount }, (_, index) => divisionCount - index).map(item => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </label>}
+          </div>
+          {tier && tier !== 'legacy' && <RankBadge game={game} tier={tier} division={divisionCount ? division || null : null} />}
           <p className="score-source">
-            {profile && `환산 ${profile.baseScore.toLocaleString()} PT · 적용 ${profile.effectiveScore.toLocaleString()} PT. `}
-            비워두면 환산 점수를 사용합니다.
+            {profile && `기본 ${profile.baseScore.toLocaleString()} PT · 현재 적용 ${profile.effectiveScore.toLocaleString()} PT. `}
+            미지정 시 기본 점수를 사용합니다.
           </p>
           <fieldset className="role-options">
             <legend>선호 포지션</legend>

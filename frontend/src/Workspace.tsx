@@ -174,8 +174,6 @@ export default function Workspace({ username, onLogout }: { username: string; on
     <header className="site-header">
       <div className="header-inner">
         <span className="brand">TEAMFORGE</span>
-        <span className="header-divider" />
-        <span className="header-description">내전 팀 편성</span>
         <span className="header-user" title={username}>{username}</span>
         <button className="theme-toggle" onClick={toggleTheme}
           aria-label={theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}>
@@ -192,11 +190,7 @@ export default function Workspace({ username, onLogout }: { username: string; on
         onClick={() => { setSection(item); clearMessages(); }}>{item}</button>)}</div>
     </nav>
     <main>
-      <div className="page-heading">
-        <h1>{section}</h1>
-        <p>{managing ? '참가자와 게임별 프로필을 관리합니다.' : showingHistory
-          ? '확정된 팀 구성과 경기 결과를 확인합니다.' : '참가자 10명을 골라 두 팀으로 나눕니다.'}</p>
-      </div>
+      <h1 className="page-heading">{section}</h1>
       <div className="game-options" aria-label="게임 선택">
         {(Object.keys(games) as Game[]).map(item => <button key={item}
           className={`game-tab${item === game ? ' selected' : ''}`} aria-pressed={item === game} disabled={busy}
@@ -264,7 +258,6 @@ export default function Workspace({ username, onLogout }: { username: string; on
                 </> : <span>미선택</span>}
               </div>;
             })}</div>
-            <div className="balance-note"><p>선호 포지션을 먼저 맞추고 팀 점수 차이를 줄입니다.</p></div>
             <button className="primary generate" disabled={busy || selected.length !== 10} onClick={() => generate(false)}>
               <Swords size={18} />{busy && !draft ? '처리 중…' : '팀 생성하기'}
             </button>
@@ -272,7 +265,6 @@ export default function Workspace({ username, onLogout }: { username: string; on
         </div>
       </>}
       {showingHistory && <MatchHistory key={game} game={game} onCreate={() => setSection('팀 편성')} />}
-      <footer><strong>TEAMFORGE</strong><span>내전 팀 편성 도구</span></footer>
     </main>
     {editor && <ProfileEditor game={game} participant={editor.participant} onChange={updateParticipant}
       onClose={() => setEditor(null)} onDelete={deleteParticipant} />}

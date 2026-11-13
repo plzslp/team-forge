@@ -72,6 +72,9 @@ public class GameProfileService {
         Participant participant = participantRepository.findById(participantId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         if (!participant.active()) throw new BusinessException(ErrorCode.PARTICIPANT_DELETED);
+        if (request.manualRank() != null && request.manualScore() != null) {
+            throw new BusinessException(ErrorCode.INVALID_MANUAL_RANK);
+        }
 
         Optional<GameProfile> existing = gameProfileRepository.findByParticipantIdAndGame(participantId, game);
         GameProfile profile;
@@ -83,6 +86,7 @@ public class GameProfileService {
             profile = existing.orElseThrow();
             profile.update(request.accountId(), request.manualScore(), request.preferredPositions());
         }
+        if (request.manualRank() != null) profile.overrideRank(request.manualRank());
         return new UpsertResult(GameProfileResponse.from(profile), created);
     }
 

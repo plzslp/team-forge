@@ -30,7 +30,6 @@ export default function Login({ onLogin }: { onLogin: (account: { username: stri
       <div className="login-frame">
         <section className="login-lineup" aria-labelledby="login-brand">
           <h1 id="login-brand">TeamForge</h1>
-          <p>내전의 시작, 5대5 팀 편성</p>
           <div className="login-teams" aria-hidden="true">
             {['A', 'B'].map(team => (
               <div className={`login-team login-team-${team}`} key={team}>
@@ -42,7 +41,6 @@ export default function Login({ onLogin }: { onLogin: (account: { username: stri
         </section>
         <section className="login-panel" aria-labelledby="login-title">
           <h2 id="login-title">로그인</h2>
-          <p>공유 계정으로 내전 공간에 접속하세요.</p>
           <form method="post" action="/login" onSubmit={submit} aria-busy={busy}>
             <label htmlFor="login-username">아이디</label>
             <input id="login-username" name="username" autoComplete="username" required value={username}

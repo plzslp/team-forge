@@ -3,6 +3,7 @@ import { Check, Pencil, Plus, Search } from 'lucide-react';
 import { errorMessage } from './api';
 import { positionLabels, positions, type Game, type Page, type Participant, type Position, type ProfileSummary } from './domain';
 import PageControls from './PageControls';
+import RankBadge from './RankBadge';
 import { useQuery } from './useQuery';
 
 type Props = {
@@ -67,8 +68,9 @@ export default function ParticipantRoster({ game, managing, selected, revision, 
           ))}
         </div>
       </>}
-      <div className="list-head" aria-hidden="true">
-        <span>참가자</span><span>선호 포지션</span><span>적용 점수</span><span>{managing ? '수정' : '선택'}</span>
+      <div className={`list-head${managing ? '' : ' list-head-editable'}`} aria-hidden="true">
+        <span>참가자</span><span>선호 포지션</span><span>티어 / 점수</span><span>{managing ? '수정' : '선택'}</span>
+        {!managing && <span>수정</span>}
       </div>
       <div className="players" aria-busy={loading}>
         {loading && <p className="empty" role="status">참가자를 불러오는 중…</p>}
@@ -83,20 +85,32 @@ export default function ParticipantRoster({ game, managing, selected, revision, 
           const profile = 'participantId' in row ? row : null;
           const participant = { id: 'id' in row ? row.id : row.participantId, name: row.name };
           const picked = selected.some(item => item.participantId === participant.id);
-          return (
-            <button key={participant.id} className={`player${!managing && picked ? ' picked' : ''}`}
+          const appliedRank = profile?.manualRank ?? (profile?.manualScore == null ? profile?.riotRank : null);
+          const player = (
+            <button type="button" key={participant.id} className={`player${!managing && picked ? ' picked' : ''}`}
               disabled={busy} aria-pressed={managing ? undefined : picked}
               aria-label={`${row.name} ${managing ? '수정' : picked ? '선택 해제' : '선택'}`}
+              aria-describedby={`player-detail-${participant.id}`}
               onClick={() => { if (managing) onEdit(participant); else if (profile) onToggle(profile); }}>
               <span className="player-info"><strong>{row.name}</strong>
                 {profile?.accountId && <small>{profile.accountId}</small>}
               </span>
               <span className="player-role">{profile?.preferredPositions.map(item => positionLabels[item]).join(' · ') ?? '—'}</span>
-              <span className="tier">{profile ? `${profile.effectiveScore.toLocaleString()} PT` : '—'}</span>
+              <span className="tier" id={`player-detail-${participant.id}`}>
+                {appliedRank?.tier ? <RankBadge game={game} tier={appliedRank.tier} division={appliedRank.division} />
+                  : profile?.manualScore != null ? '수동 점수' : appliedRank ? '언랭크' : profile ? '미지정' : '—'}
+                {profile && <small>{profile.effectiveScore.toLocaleString()} PT</small>}
+              </span>
               {managing ? <span className="edit-action"><Pencil size={14} /><span>수정</span></span>
                 : <span className="checkbox">{picked && <Check size={13} />}</span>}
             </button>
           );
+          if (managing) return player;
+          return <div className="editable-player" key={participant.id}>
+            {player}
+            <button type="button" className="edit-action roster-edit" aria-label={`${row.name} 수정`}
+              disabled={busy} onClick={() => onEdit(participant)}><Pencil size={15} aria-hidden="true" /></button>
+          </div>;
         })}
       </div>
       {data && <PageControls page={page} totalPages={data.totalPages} onPage={setPage} />}

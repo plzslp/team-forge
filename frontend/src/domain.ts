@@ -23,9 +23,26 @@ export const positions: Record<Game, readonly Position[]> = {
 };
 
 export type Participant = { id: string; name: string };
+export const rankTiers = {
+  IRON: '아이언', BRONZE: '브론즈', SILVER: '실버', GOLD: '골드', PLATINUM: '플래티넘',
+  EMERALD: '에메랄드', DIAMOND: '다이아몬드', MASTER: '마스터', GRANDMASTER: '그랜드마스터',
+  CHALLENGER: '챌린저', CHAMPION: '챔피언',
+} as const;
+export type RankTier = keyof typeof rankTiers;
+export type ManualRank = { tier: RankTier; division: number | null };
+export const tiersByGame: Record<Game, readonly RankTier[]> = {
+  LOL: ['IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER'],
+  OVERWATCH: ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER', 'GRANDMASTER', 'CHAMPION'],
+};
+export function rankDivisionCount(game: Game, tier: RankTier) {
+  if (game === 'OVERWATCH') return 5;
+  return tier === 'MASTER' || tier === 'GRANDMASTER' || tier === 'CHALLENGER' ? 0 : 4;
+}
+
 export type ProfileInput = {
   accountId: string | null;
   manualScore: number | null;
+  manualRank: ManualRank | null;
   preferredPositions: Position[];
 };
 export type Profile = ProfileInput & {
@@ -35,7 +52,8 @@ export type Profile = ProfileInput & {
   effectiveScore: number;
   riotRank: { tier: string | null; division: string | null; leaguePoints: number | null; updatedAt: string } | null;
 };
-export type ProfileSummary = Pick<Profile, 'participantId' | 'game' | 'accountId' | 'effectiveScore' | 'preferredPositions'> & {
+export type ProfileSummary = Pick<Profile, 'participantId' | 'game' | 'accountId' | 'effectiveScore' | 'preferredPositions'
+  | 'manualScore' | 'manualRank' | 'riotRank'> & {
   name: string;
 };
 export type Page<T> = { content: T[]; page: number; size: number; totalElements: number; totalPages: number };

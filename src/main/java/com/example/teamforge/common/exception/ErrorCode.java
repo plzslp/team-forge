@@ -20,6 +20,7 @@ public enum ErrorCode {
     GAME_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "이 게임의 프로필을 찾을 수 없습니다."),
     INVALID_PREFERRED_POSITION(HttpStatus.BAD_REQUEST, "게임에 맞는 선호 포지션을 하나 이상 선택하세요."),
     INVALID_SCORE(HttpStatus.BAD_REQUEST, "점수는 음수일 수 없습니다."),
+    INVALID_MANUAL_RANK(HttpStatus.BAD_REQUEST, "게임에 맞는 티어와 디비전을 선택하세요. 수동 점수와 티어는 함께 지정할 수 없습니다."),
     INVALID_RIOT_ID(HttpStatus.BAD_REQUEST, "롤 프로필에 올바른 Riot ID(이름#태그)를 등록하세요."),
     RIOT_ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND, "Riot 계정을 찾을 수 없습니다."),
     RIOT_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "Riot API 키가 설정되지 않았습니다."),
