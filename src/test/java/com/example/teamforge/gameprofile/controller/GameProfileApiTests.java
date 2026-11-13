@@ -8,6 +8,7 @@ import com.example.teamforge.gameprofile.repository.GameProfileRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -212,6 +213,63 @@ class GameProfileApiTests {
                 .andExpect(jsonPath("$.paths['/api/participants/{participantId}/profiles/{game}'].put.responses['201']").exists())
                 .andExpect(jsonPath("$.paths['/api/participants/{participantId}/profiles/{game}'].put.responses['409'].content['application/json'].schema['$ref']")
                         .value("#/components/schemas/ErrorResponse"));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "LOL, LOL_TOP, SILVER, 2, 1000",
+            "LOL, LOL_TOP, MASTER, null, 2800",
+            "OVERWATCH, OVERWATCH_TANK, BRONZE, 5, 0",
+            "OVERWATCH, OVERWATCH_TANK, EMERALD, 1, 2400",
+            "OVERWATCH, OVERWATCH_TANK, CHAMPION, 1, 4400"
+    })
+    void manualRankIsPersistedAndShownInTheRoster(String game, String position, String tier, String division, int score)
+            throws Exception {
+        // given
+        Participant participant = saveParticipant();
+        String path = path(participant.getId(), game);
+        String body = """
+                {"manualRank":{"tier":"%s","division":%s},"preferredPositions":["%s"]}
+                """.formatted(tier, division, position);
+
+        // when
+        mvc.perform(put(path).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+        em.flush();
+        em.clear();
+
+        // then
+        mvc.perform(get(path)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.manualRank.tier").value(tier))
+                .andExpect(jsonPath("$.manualScore").value(score))
+                .andExpect(jsonPath("$.effectiveScore").value(score));
+        mvc.perform(get("/api/game-profiles?game=" + game)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].manualRank.tier").value(tier))
+                .andExpect(jsonPath("$.content[0].effectiveScore").value(score));
+
+        // when / then: 티어를 미지정으로 저장하면 기본 점수를 다시 적용한다.
+        mvc.perform(put(path).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"manualRank\":null,\"preferredPositions\":[\"" + position + "\"]}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.manualRank").doesNotExist())
+                .andExpect(jsonPath("$.manualScore").doesNotExist()).andExpect(jsonPath("$.effectiveScore").value(0));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "\"manualRank\":{\"tier\":\"GOLD\",\"division\":5}",
+            "\"manualRank\":{\"tier\":\"GOLD\"}",
+            "\"manualRank\":{\"tier\":\"MASTER\",\"division\":1}",
+            "\"manualRank\":{\"tier\":\"CHAMPION\",\"division\":1}",
+            "\"manualScore\":0,\"manualRank\":{\"tier\":\"GOLD\",\"division\":4}"
+    })
+    void rejectsInvalidManualRanks(String fields) throws Exception {
+        // given
+        Participant participant = saveParticipant();
+        String body = "{" + fields + ",\"preferredPositions\":[\"LOL_TOP\"]}";
+
+        // when / then
+        mvc.perform(put(path(participant.getId(), "LOL")).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_MANUAL_RANK"));
     }
 
     private Participant saveParticipant() {

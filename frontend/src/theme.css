@@ -12,12 +12,12 @@
 [data-theme='dark'] :is(.player.picked,.filter.on,.swap-notice,.team button.swapping) { background: #293c5e; }
 [data-theme='dark'] :is(.notice,.lookup-result) { border-color: #415a7b; }
 [data-theme='dark'] .notice { color: #bad0ff; background: #253852; }
-[data-theme='dark'] :is(.demo-note,.game-tab,.game-mode,.section-caption small,.filter,.list-label,.list-head,.player-info small,.player-role,.roster-footer,.reset,.count>span,.count strong span,.slot,.slot-number,.slot small,.slot button,.balance-note,.result-heading p,.secondary,.team button span,.team button svg,.empty,.history-card p,.history-card small,.eyebrow,footer,footer strong,.modal>p,.modal-close,.modal label,.role-options legend,.role-options legend small,.position-hint,.riot-lookup p,.score-source) { color: #aeb9c9; }
-[data-theme='dark'] :is(.demo-note strong,.tier small,.slot strong,.balance-note strong,.result-heading p strong,.team button,.history-empty h2,.searchbox input) { color: #e1e6ee; }
+[data-theme='dark'] :is(.demo-note,.game-tab,.game-mode,.section-caption small,.filter,.list-label,.list-head,.player-info small,.player-role,.roster-footer,.reset,.count>span,.count strong span,.slot,.slot-number,.slot small,.slot button,.result-heading p,.secondary,.team button span,.team button svg,.empty,.history-card p,.history-card small,.eyebrow,.modal>p,.modal-close,.modal label,.role-options legend,.role-options legend small,.position-hint,.riot-lookup p,.score-source) { color: #aeb9c9; }
+[data-theme='dark'] :is(.demo-note strong,.tier small,.slot strong,.result-heading p strong,.team button,.history-empty h2,.searchbox input) { color: #e1e6ee; }
 [data-theme='dark'] .tier { color: #b1c4d9; }
 [data-theme='dark'] .tier.emerald { color: #71d4b2; }
 [data-theme='dark'] :is(.game-tab.selected,.filter.on,.text-button,.edit-action,.source-label,.history-card summary) { color: var(--blue); }
-[data-theme='dark'] :is(.searchbox,.game-options,.player,.checkbox,.slot,.secondary,footer,.riot-lookup,.history-card details) { border-color: var(--line); }
+[data-theme='dark'] :is(.searchbox,.game-options,.player,.checkbox,.slot,.secondary,.riot-lookup,.history-card details) { border-color: var(--line); }
 [data-theme='dark'] .player { border-left-color: transparent; }
 [data-theme='dark'] .player.picked { border-left-color: var(--blue); }
 [data-theme='dark'] .picked .checkbox { background: #4778d4; border-color: #88adff; color: white; }

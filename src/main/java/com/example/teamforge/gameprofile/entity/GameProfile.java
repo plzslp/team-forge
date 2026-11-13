@@ -36,6 +36,9 @@ public class GameProfile {
 
     private Integer manualScore;
 
+    @Embedded
+    private ManualRank manualRank;
+
     private String riotPuuid;
     private String riotTier;
     private String riotDivision;
@@ -96,7 +99,13 @@ public class GameProfile {
     public GameProfile overrideScore(Integer score) {
         if (score != null && score < 0) throw new BusinessException(ErrorCode.INVALID_SCORE);
         this.manualScore = score;
+        this.manualRank = null;
         return this;
+    }
+
+    public void overrideRank(ManualRank rank) {
+        overrideScore(rank.score(game));
+        this.manualRank = rank;
     }
 
     /** 조회 성공 시에만 호출하며 기존 수동 보정은 유지한다. */

@@ -61,11 +61,12 @@ class SharedAccountSecurityTests {
     void unauthenticatedRequestsCanLoadFrontendAssets() throws Exception {
         // given
         String index = mvc.perform(get("/index.html")).andReturn().getResponse().getContentAsString();
-        List<String> assets = Pattern.compile("(?:src|href)=\"(/assets/[^\"]+\\.(?:js|css))\"").matcher(index)
+        List<String> assets = Pattern.compile("(?:src|href)=\"(/assets/[^\"]+\\.(?:js|css|png))\"").matcher(index)
                 .results().map(result -> result.group(1)).toList();
 
         // when / then
         assertFalse(assets.isEmpty());
+        assertTrue(assets.contains("/assets/favicon.png"));
         for (String asset : assets) {
             mvc.perform(get(asset)).andExpect(status().isOk()).andExpect(unauthenticated());
         }

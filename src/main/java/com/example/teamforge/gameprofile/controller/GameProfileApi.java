@@ -19,8 +19,8 @@ import java.util.UUID;
 @Tag(name = "GameProfiles", description = "참여자 게임 프로필 관리 API")
 public abstract class GameProfileApi {
     @Operation(summary = "게임 프로필 등록·전체 수정", description = "참여자·게임별 하나의 프로필을 관리합니다. "
-            + "계정·수동 점수·선호 포지션을 교체하며 환산 점수는 유지합니다. "
-            + "신규 환산 점수는 0이며 수동 점수 null은 보정 해제, 0은 유효한 지정값입니다. "
+            + "계정·선호 포지션과 수동 보정을 교체하며 Riot 환산 점수는 유지합니다. "
+            + "manualRank는 게임에 맞는 티어·디비전을 환산합니다. 기존 manualScore도 지원하며 두 값을 모두 비우면 보정을 해제합니다. "
             + "계정은 앞뒤 공백을 제거하고 빈 값은 null로 저장합니다.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "신규 등록. Location에 조회 경로를 반환합니다."),

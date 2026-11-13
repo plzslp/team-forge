@@ -25,8 +25,7 @@
   color: #fff;
 }
 
-.login-lineup h1 { font-size: clamp(30px, 5vw, 44px); font-weight: 900; letter-spacing: -0.06em; }
-.login-lineup p { margin: 9px 0 30px; color: #c5cfda; line-height: 1.5; }
+.login-lineup h1 { margin-bottom: 22px; font-size: clamp(30px, 5vw, 44px); font-weight: 900; letter-spacing: -0.06em; }
 .login-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .login-team { display: grid; gap: 6px; color: #b9d1ff; }
 .login-team-B { color: #ffc3c8; }
@@ -41,7 +40,6 @@
 .login-team-B .login-slot { border-color: #675563; border-left-color: #e18e9b; background: #4b424f; }
 .login-panel { align-self: center; padding: clamp(26px, 5vw, 48px); }
 .login-panel h2 { margin: 0; font-size: 26px; letter-spacing: -0.04em; }
-.login-panel > p { margin: 9px 0 24px; color: var(--muted); line-height: 1.6; }
 .login-panel label { display: block; margin: 16px 0 6px; font-weight: 700; }
 .login-panel input {
   width: 100%;
@@ -71,7 +69,7 @@
   .login-screen { padding: 16px; }
   .login-frame { grid-template-columns: 1fr; }
   .login-lineup { padding: 23px 26px; }
-  .login-lineup p { margin-bottom: 16px; }
+  .login-lineup h1 { margin-bottom: 16px; }
   .login-team { grid-template-columns: auto repeat(5, minmax(0, 1fr)); align-items: center; gap: 4px; }
   .login-team strong { margin: 0 3px 0 0; white-space: nowrap; }
   .login-slot { height: 13px; border-left-width: 2px; }
