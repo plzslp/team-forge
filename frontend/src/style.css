@@ -782,27 +782,7 @@ dialog.modal::backdrop { background: #142033a0; }
 .rank-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(74px, 28%); gap: 12px; }
 .rank-fields > label { min-width: 0; margin-bottom: 6px; }
 .rank-badge { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; }
-.rank-icon {
-  display: inline-grid;
-  place-items: center;
-  width: 19px;
-  height: 19px;
-  flex: 0 0 19px;
-  color: #fff;
-  background: var(--rank-color, #64748b);
-  border-radius: 5px;
-}
-.rank-overwatch .rank-icon { border-radius: 50%; }
-.rank-iron { --rank-color: #68625d; }
-.rank-bronze { --rank-color: #99552e; }
-.rank-silver { --rank-color: #536a80; }
-.rank-gold { --rank-color: #8d6208; }
-.rank-platinum { --rank-color: #267477; }
-.rank-emerald { --rank-color: #08795c; }
-.rank-diamond { --rank-color: #405bb0; }
-.rank-master { --rank-color: #7245a1; }
-.rank-grandmaster { --rank-color: #ac3a52; }
-.rank-challenger, .rank-champion { --rank-color: #8758a1; }
+.rank-emblem { display: block; flex-shrink: 0; }
 @media (max-width: 900px) {
   .list-head.list-head-editable { grid-template-columns: minmax(62px, 1fr) 54px 91px 23px 38px; gap: 5px; }
   .editable-player .player { grid-template-columns: minmax(62px, 1fr) 54px 91px 23px; gap: 5px; padding-right: 5px; }

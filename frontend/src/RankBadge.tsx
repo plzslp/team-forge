@@ -1,10 +1,5 @@
-import { Crown, Diamond, Gem, Shield, ShieldCheck, Star, Swords, Trophy } from 'lucide-react';
 import { rankTiers, type Game, type RankTier } from './domain';
-
-const rankIcons = {
-  IRON: Shield, BRONZE: ShieldCheck, SILVER: Star, GOLD: Trophy, PLATINUM: Diamond,
-  EMERALD: Gem, DIAMOND: Gem, MASTER: Swords, GRANDMASTER: Crown, CHALLENGER: Trophy, CHAMPION: Crown,
-};
+import { rankEmblems } from './rankEmblems';
 
 export default function RankBadge({ game, tier, division }: {
   game: Game;
@@ -12,10 +7,16 @@ export default function RankBadge({ game, tier, division }: {
   division?: number | string | null;
 }) {
   if (!Object.hasOwn(rankTiers, tier)) return <span>{tier}{division != null && ` ${division}`}</span>;
-  const knownTier = tier as RankTier;
-  const Icon = rankIcons[knownTier];
-  return <span className={`rank-badge rank-${knownTier.toLowerCase()} rank-${game.toLowerCase()}`}>
-    <span className="rank-icon" aria-hidden="true"><Icon size={12} strokeWidth={2.4} /></span>
-    <span>{rankTiers[knownTier]}{division != null && ` ${division}`}</span>
+  const rank = tier as RankTier;
+  const emblem = rankEmblems[game][rank];
+  return <span className="rank-badge">
+    {emblem && (
+      <svg className="rank-emblem" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d={emblem.silhouette} fill={emblem.colors[0]} />
+        <path d={emblem.face} fill={emblem.colors[1]} />
+        <path d={emblem.highlight} fill={emblem.colors[2]} />
+      </svg>
+    )}
+    <span>{rankTiers[rank]}{division != null && ` ${division}`}</span>
   </span>;
 }
