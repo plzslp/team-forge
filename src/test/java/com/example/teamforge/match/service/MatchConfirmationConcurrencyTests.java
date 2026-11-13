@@ -20,6 +20,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -36,6 +37,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -54,6 +56,11 @@ class MatchConfirmationConcurrencyTests {
     @BeforeEach
     void prepareCommittedPreview() {
         workers = Executors.newFixedThreadPool(2);
+        request = preparePreview();
+        participantId = request.participants().get(0).participantId();
+    }
+
+    private MatchCreateRequest preparePreview() {
         List<UUID> ids = transaction().execute(status -> {
             List<UUID> result = new ArrayList<>();
             for (int index = 0; index < 10; index++) {
@@ -67,8 +74,7 @@ class MatchConfirmationConcurrencyTests {
         TeamPreviewResponse preview = previewService.create(new TeamPreviewRequest(Game.LOL, ids, false));
         List<MatchParticipantRequest> members = preview.teams().stream().flatMap(team -> team.participants().stream()
                 .map(member -> new MatchParticipantRequest(member.participantId(), team.team(), member.assignedPosition()))).toList();
-        request = new MatchCreateRequest(Game.LOL, members, preview.participantVersions(), false);
-        participantId = members.get(0).participantId();
+        return new MatchCreateRequest(Game.LOL, members, preview.participantVersions(), false);
     }
 
     @AfterEach
@@ -201,6 +207,45 @@ class MatchConfirmationConcurrencyTests {
             // then: 동일한 최초 응답을 반환하고 경기는 한 건만 저장한다.
             assertEquals(first.get(5, TimeUnit.SECONDS), retry.get(5, TimeUnit.SECONDS));
             assertEquals(1L, jdbc.queryForObject("select count(*) from matches", Long.class));
+        } finally {
+            allowCommit.countDown();
+        }
+    }
+
+    @Test
+    void concurrentDifferentConfirmationsWithTheSameKeyReturnKeyReuseError() throws Exception {
+        // given: 참가자가 겹치지 않는 별도 편성을 준비하고 첫 확정을 커밋 직전에 멈춘다.
+        MatchCreateRequest otherRequest = preparePreview();
+        UUID key = UUID.randomUUID();
+        CountDownLatch saved = new CountDownLatch(1);
+        CountDownLatch allowCommit = new CountDownLatch(1);
+        CountDownLatch secondStarted = new CountDownLatch(1);
+        Future<MatchCreateResponse> first = workers.submit(() -> transaction().execute(status -> {
+            MatchCreateResponse response = matchService.create(request, key);
+            saved.countDown();
+            await(allowCommit);
+            return response;
+        }));
+        try {
+            assertTrue(saved.await(5, TimeUnit.SECONDS));
+
+            // when: 다른 편성이 같은 키로 저장을 시도해 DB 고유 제약에서 대기한다.
+            Future<MatchCreateResponse> second = workers.submit(() -> transaction().execute(status -> {
+                secondStarted.countDown();
+                return matchService.create(otherRequest, key);
+            }));
+            assertTrue(secondStarted.await(5, TimeUnit.SECONDS));
+            assertThrows(TimeoutException.class, () -> second.get(1, TimeUnit.SECONDS));
+            allowCommit.countDown();
+
+            // then: 최초 확정만 저장되며 두 번째 요청은 키 재사용 오류를 받는다.
+            MatchCreateResponse created = first.get(5, TimeUnit.SECONDS);
+            ExecutionException failure = assertThrows(ExecutionException.class, () -> second.get(5, TimeUnit.SECONDS));
+            BusinessException error = assertInstanceOf(BusinessException.class, failure.getCause());
+            assertEquals(ErrorCode.IDEMPOTENCY_KEY_REUSED, error.getErrorCode());
+            assertInstanceOf(DataIntegrityViolationException.class, error.getCause());
+            assertEquals(created.id(), jdbc.queryForObject("select id from matches", UUID.class));
+            assertEquals(10L, jdbc.queryForObject("select count(*) from match_participants", Long.class));
         } finally {
             allowCommit.countDown();
         }

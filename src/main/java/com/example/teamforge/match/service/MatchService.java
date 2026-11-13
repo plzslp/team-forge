@@ -21,6 +21,8 @@ import com.example.teamforge.match.repository.MatchRepository;
 import com.example.teamforge.participant.entity.Participant;
 import com.example.teamforge.participant.repository.ParticipantRepository;
 import lombok.RequiredArgsConstructor;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
@@ -41,11 +43,17 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class MatchService {
+    // H2는 제약 이름과 자동 생성 인덱스 이름을 함께 보고한다.
+    private static final Pattern CONFIRMATION_KEY_CONSTRAINT = Pattern.compile(
+            "(?:PUBLIC\\.)?UK_MATCHES_CONFIRMATION_KEY(?: INDEX PUBLIC\\.UK_MATCHES_CONFIRMATION_KEY_INDEX_[0-9A-F]+)?",
+            Pattern.CASE_INSENSITIVE);
+
     private final ParticipantRepository participantRepository;
     private final GameProfileRepository gameProfileRepository;
     private final MatchRepository matchRepository;
@@ -162,7 +170,16 @@ public class MatchService {
 
         Instant createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
         Match match = new Match(UUID.randomUUID(), request.game(), createdAt, snapshots, null, confirmationKey, fingerprint);
-        return MatchCreateResponse.from(matchRepository.saveAndFlush(match));
+        try {
+            return MatchCreateResponse.from(matchRepository.saveAndFlush(match));
+        } catch (DataIntegrityViolationException exception) {
+            if (confirmationKey != null && exception.getCause() instanceof ConstraintViolationException violation
+                    && "23505".equals(violation.getSQLState()) && violation.getConstraintName() != null
+                    && CONFIRMATION_KEY_CONSTRAINT.matcher(violation.getConstraintName()).matches()) {
+                throw new BusinessException(ErrorCode.IDEMPOTENCY_KEY_REUSED, exception);
+            }
+            throw exception;
+        }
     }
 
     private Optional<MatchCreateResponse> findConfirmation(UUID confirmationKey, String fingerprint) {
