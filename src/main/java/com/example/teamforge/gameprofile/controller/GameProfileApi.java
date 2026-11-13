@@ -1,0 +1,46 @@
+package com.example.teamforge.gameprofile.controller;
+
+import com.example.teamforge.common.exception.ErrorResponse;
+import com.example.teamforge.gameprofile.dto.request.GameProfileRequest;
+import com.example.teamforge.gameprofile.dto.response.GameProfileResponse;
+import com.example.teamforge.gameprofile.entity.Game;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+
+import java.util.UUID;
+
+/** Swagger 문서와 메서드 선언. HTTP 매핑과 입력 검증은 Controller에서 처리한다. */
+@Tag(name = "GameProfiles", description = "참여자 게임 프로필 관리 API")
+public abstract class GameProfileApi {
+    @Operation(summary = "게임 프로필 등록·전체 수정", description = "참여자·게임별 하나의 프로필을 관리합니다. "
+            + "계정·선호 포지션과 수동 보정을 교체하며 Riot 환산 점수는 유지합니다. "
+            + "manualRank는 게임에 맞는 티어·디비전을 환산합니다. 기존 manualScore도 지원하며 두 값을 모두 비우면 보정을 해제합니다. "
+            + "계정은 앞뒤 공백을 제거하고 빈 값은 null로 저장합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "신규 등록. Location에 조회 경로를 반환합니다."),
+            @ApiResponse(responseCode = "200", description = "기존 프로필 수정"),
+            @ApiResponse(responseCode = "400", description = "잘못된 입력 또는 게임에 맞지 않는 포지션",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "참여자가 없음",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "삭제된 참여자 또는 동시 변경 충돌",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public abstract ResponseEntity<GameProfileResponse> upsert(UUID participantId, Game game, GameProfileRequest request);
+
+    @Operation(summary = "게임 프로필 조회", description = "활성 참여자의 해당 게임 프로필과 실제 적용 점수를 조회합니다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "조회 완료"),
+            @ApiResponse(responseCode = "400", description = "잘못된 UUID 또는 게임",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "프로필 없음: GAME_PROFILE_NOT_FOUND, 참여자 없음·삭제: RESOURCE_NOT_FOUND",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public abstract ResponseEntity<GameProfileResponse> findByParticipantIdAndGame(UUID participantId, Game game);
+}

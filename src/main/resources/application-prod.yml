@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  h2:
+    console:
+      enabled: false
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true

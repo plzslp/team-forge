@@ -1,0 +1,51 @@
+package com.example.teamforge.common.exception;
+
+import lombok.Getter;
+import org.springframework.http.HttpStatus;
+
+/** 클라이언트가 구분할 수 있는 오류 코드와 공개 메시지. */
+@Getter
+public enum ErrorCode {
+    INVALID_REQUEST(HttpStatus.BAD_REQUEST, "요청 형식이나 입력값을 확인하세요."),
+    RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 리소스를 찾을 수 없습니다."),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 HTTP 메서드입니다."),
+    NOT_ACCEPTABLE(HttpStatus.NOT_ACCEPTABLE, "요청한 응답 형식을 제공할 수 없습니다."),
+    UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 요청 형식입니다."),
+    DATA_CONFLICT(HttpStatus.CONFLICT, "데이터 제약으로 요청을 처리할 수 없습니다."),
+    CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "데이터가 변경되었습니다. 새로 조회한 뒤 다시 시도하세요."),
+    INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다."),
+
+    INVALID_PARTICIPANT_NAME(HttpStatus.BAD_REQUEST, "이름은 공백이 아닌 1~20자여야 합니다."),
+    PARTICIPANT_DELETED(HttpStatus.CONFLICT, "삭제된 참여자는 수정할 수 없습니다."),
+    GAME_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "이 게임의 프로필을 찾을 수 없습니다."),
+    INVALID_PREFERRED_POSITION(HttpStatus.BAD_REQUEST, "게임에 맞는 선호 포지션을 하나 이상 선택하세요."),
+    INVALID_SCORE(HttpStatus.BAD_REQUEST, "점수는 음수일 수 없습니다."),
+    INVALID_MANUAL_RANK(HttpStatus.BAD_REQUEST, "게임에 맞는 티어와 디비전을 선택하세요. 수동 점수와 티어는 함께 지정할 수 없습니다."),
+    INVALID_RIOT_ID(HttpStatus.BAD_REQUEST, "롤 프로필에 올바른 Riot ID(이름#태그)를 등록하세요."),
+    RIOT_ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND, "Riot 계정을 찾을 수 없습니다."),
+    RIOT_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "Riot API 키가 설정되지 않았습니다."),
+    RIOT_AUTHENTICATION_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "Riot API 인증을 확인해야 합니다."),
+    RIOT_RATE_LIMITED(HttpStatus.SERVICE_UNAVAILABLE, "Riot 요청 제한 중입니다. 잠시 후 다시 시도하세요."),
+    RIOT_UNAVAILABLE(HttpStatus.BAD_GATEWAY, "Riot 정보를 조회할 수 없습니다. 잠시 후 다시 시도하세요."),
+    INVALID_TEAM_COMPOSITION(HttpStatus.BAD_REQUEST, "중복 없는 참가자 10명을 팀당 5명으로 구성해야 합니다."),
+    POSITION_GAME_MISMATCH(HttpStatus.BAD_REQUEST, "배정 포지션은 내전 게임에 속해야 합니다."),
+    INVALID_MATCH_PARTICIPANT(HttpStatus.BAD_REQUEST, "참가자 스냅샷 값이 올바르지 않습니다."),
+    INVALID_MATCH_SCORE(HttpStatus.BAD_REQUEST, "경기 스코어는 음수일 수 없습니다."),
+    INVALID_MATCH_MEMO(HttpStatus.BAD_REQUEST, "메모는 2000자 이하로 입력하세요."),
+    INVALID_PREVIEW_VERSION(HttpStatus.BAD_REQUEST, "참여자와 프로필 버전은 음수일 수 없습니다."),
+    PREVIEW_PARTICIPANTS_MISMATCH(HttpStatus.BAD_REQUEST, "참가자별 변경 감지 버전이 필요합니다."),
+    PREFERRED_POSITION_UNAVAILABLE(HttpStatus.CONFLICT, "선호 포지션만으로 편성할 수 없습니다. 비선호 배정 허용 후 다시 요청하세요."),
+    INVALID_TEAM_POSITIONS(HttpStatus.BAD_REQUEST, "각 팀의 게임별 포지션 구성을 확인하세요."),
+    PREVIEW_OUTDATED(HttpStatus.CONFLICT, "참가자 정보가 변경되었거나 사용할 수 없습니다. 팀 미리보기를 다시 생성하세요."),
+    IDEMPOTENCY_KEY_REUSED(HttpStatus.CONFLICT, "같은 확정 키로 다른 팀 편성을 저장할 수 없습니다."),
+    NON_PREFERRED_POSITION_NOT_ALLOWED(HttpStatus.CONFLICT, "비선호 포지션 배정을 허용한 뒤 확정하세요.");
+
+    private final HttpStatus status;
+    private final String message;
+
+    ErrorCode(HttpStatus status, String message) {
+        this.status = status;
+        this.message = message;
+    }
+
+}
