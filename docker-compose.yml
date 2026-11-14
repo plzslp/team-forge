@@ -1,0 +1,37 @@
+services:
+  app:
+    image: ${TEAMFORGE_IMAGE:-teamforge:local}
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://db:5432/teamforge
+      DB_USERNAME: ${DB_USERNAME:-teamforge}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+      TEAMFORGE_AUTH_USERNAME: ${TEAMFORGE_AUTH_USERNAME:?Set TEAMFORGE_AUTH_USERNAME}
+      TEAMFORGE_AUTH_PASSWORD: ${TEAMFORGE_AUTH_PASSWORD:?Set TEAMFORGE_AUTH_PASSWORD}
+      RIOT_APIKEY: ${RIOT_APIKEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: teamforge
+      POSTGRES_USER: ${DB_USERNAME:-teamforge}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  postgres-data:
