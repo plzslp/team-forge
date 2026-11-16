@@ -45,3 +45,41 @@ jobs:
           files: build/reports/jacoco/test/jacocoTestReport.xml
           disable_search: true
           fail_ci_if_error: true
+
+  mysql-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:26.10.0
+        env:
+          MYSQL_DATABASE: teamforge_test
+          MYSQL_ROOT_PASSWORD: test-password
+          MYSQL_ROOT_HOST: '%'
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Verify MySQL migrations and concurrent confirmations
+        env:
+          SPRING_PROFILES_ACTIVE: prod
+          MYSQL_TEST_URL: jdbc:mysql://127.0.0.1:${{ job.services.mysql.ports[3306] }}/teamforge_test
+          DB_USERNAME: root
+          DB_PASSWORD: test-password
+        run: bash ./gradlew test --tests '*MatchConfirmationConcurrencyTests' --no-daemon

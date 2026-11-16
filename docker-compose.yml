@@ -1,0 +1,15 @@
+services:
+  app:
+    image: ${TEAMFORGE_IMAGE:-teamforge:local}
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: ${DB_URL:?Set DB_URL}
+      DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+      TEAMFORGE_AUTH_USERNAME: ${TEAMFORGE_AUTH_USERNAME:?Set TEAMFORGE_AUTH_USERNAME}
+      TEAMFORGE_AUTH_PASSWORD: ${TEAMFORGE_AUTH_PASSWORD:?Set TEAMFORGE_AUTH_PASSWORD}
+      RIOT_APIKEY: ${RIOT_APIKEY:-}

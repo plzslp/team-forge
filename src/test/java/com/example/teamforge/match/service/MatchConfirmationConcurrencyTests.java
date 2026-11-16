@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -42,13 +43,14 @@ import java.util.concurrent.TimeoutException;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** 롤백되는 단일 테스트 트랜잭션 대신, 실제로 커밋되는 독립 트랜잭션 두 개를 사용한다. */
-@SpringBootTest(properties = "spring.datasource.url=jdbc:h2:mem:match-confirmation-lock-test;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=5000")
+@SpringBootTest(properties = "spring.datasource.url=${MYSQL_TEST_URL:jdbc:h2:mem:match-confirmation-lock-test;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=5000}")
 class MatchConfirmationConcurrencyTests {
     @Autowired EntityManager em;
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired MatchService matchService;
     @Autowired TeamPreviewService previewService;
     @Autowired JdbcTemplate jdbc;
+    @Value("${spring.datasource.url}") private String datasourceUrl;
     private ExecutorService workers;
     private MatchCreateRequest request;
     private UUID participantId;
@@ -81,7 +83,7 @@ class MatchConfirmationConcurrencyTests {
     void stopWorkersAndCleanDedicatedTestDatabase() throws InterruptedException {
         workers.shutdownNow();
         assertTrue(workers.awaitTermination(10, TimeUnit.SECONDS));
-        // 이 클래스 전용 H2 DB의 커밋된 테스트 데이터를 FK의 자식부터 지운다.
+        // 이 클래스 전용 DB의 커밋된 테스트 데이터를 FK의 자식부터 지운다.
         transaction().executeWithoutResult(status -> {
             em.createQuery("delete from MatchParticipant").executeUpdate();
             em.createQuery("delete from Match").executeUpdate();
@@ -244,7 +246,8 @@ class MatchConfirmationConcurrencyTests {
             BusinessException error = assertInstanceOf(BusinessException.class, failure.getCause());
             assertEquals(ErrorCode.IDEMPOTENCY_KEY_REUSED, error.getErrorCode());
             assertInstanceOf(DataIntegrityViolationException.class, error.getCause());
-            assertEquals(created.id(), jdbc.queryForObject("select id from matches", UUID.class));
+            UUID savedId = transaction().execute(status -> em.createQuery("select m.id from Match m", UUID.class).getSingleResult());
+            assertEquals(created.id(), savedId);
             assertEquals(10L, jdbc.queryForObject("select count(*) from match_participants", Long.class));
         } finally {
             allowCommit.countDown();
@@ -253,23 +256,33 @@ class MatchConfirmationConcurrencyTests {
 
     private int currentSessionId() {
         // 작업 트랜잭션과 동일한 JPA 연결에서 ID를 얻어 관찰 대상 세션을 정확히 지정한다.
-        return ((Number) em.createNativeQuery("select session_id()").getSingleResult()).intValue();
+        String sql = usesMySql() ? "select connection_id()" : "select session_id()";
+        return ((Number) em.createNativeQuery(sql).getSingleResult()).intValue();
     }
 
     private void awaitDatabaseLock(int waitingSession, int blockingSession, Future<?> waitingTask) throws InterruptedException {
         // 별도 JDBC 연결로 관찰한다. 특정 작업이 상대 작업의 잠금을 기다리는 관계까지 확인한다.
-        // H2 공식 스키마: https://h2database.github.io/html/systemtables.html#sessions
+        String sql = usesMySql() ? """
+                select count(*) from performance_schema.data_lock_waits w
+                join performance_schema.threads waiting on waiting.thread_id = w.requesting_thread_id
+                join performance_schema.threads blocking on blocking.thread_id = w.blocking_thread_id
+                where waiting.processlist_id = ? and blocking.processlist_id = ?
+                """ : """
+                select count(*) from information_schema.sessions
+                where session_id = ? and blocker_id = ?
+                """;
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         while (System.nanoTime() < deadline) {
-            Integer blocked = jdbc.queryForObject("""
-                    select count(*) from information_schema.sessions
-                    where session_id = ? and blocker_id = ?
-                    """, Integer.class, waitingSession, blockingSession);
-            if (Integer.valueOf(1).equals(blocked)) return;
+            Integer blocked = jdbc.queryForObject(sql, Integer.class, waitingSession, blockingSession);
+            if (blocked != null && blocked > 0) return;
             assertFalse(waitingTask.isDone(), "DB 잠금 대기 없이 작업이 종료됨: 대기 세션=" + waitingSession + ", 보유 세션=" + blockingSession);
             Thread.sleep(10);
         }
         fail("DB 잠금 대기 상태를 확인하지 못함: 대기 세션=" + waitingSession + ", 보유 세션=" + blockingSession);
+    }
+
+    private boolean usesMySql() {
+        return datasourceUrl.startsWith("jdbc:mysql:");
     }
 
     private void changeCurrentInformation(String change, boolean lockFirst) {

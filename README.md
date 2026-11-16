@@ -18,7 +18,7 @@ TeamForge는 롤·오버워치 내전 참가자 10명을 편성 점수와 선호
 | Backend | Java 17, Spring Boot, Spring MVC, Spring Security, Spring Data JPA |
 | Frontend | React, TypeScript, Vite |
 | 외부 API | Riot Games API, Spring WebClient |
-| Database | H2(개발·테스트), PostgreSQL(운영), Flyway |
+| Database | H2(개발·테스트), MySQL(운영), Flyway |
 | API 문서 | springdoc OpenAPI |
 | 빌드·테스트 | Gradle, JUnit, JaCoCo |
 
@@ -28,6 +28,6 @@ TeamForge는 롤·오버워치 내전 참가자 10명을 편성 점수와 선호
 
 ## 향후 개발 계획
 
-- 운영 PostgreSQL에서 마이그레이션을 검증하고 지인 대상 MVP 배포
+- 운영 MySQL에 연결하고 지인 대상 MVP 배포
 - 여러 모임이 참가자와 경기 기록을 각각 관리할 수 있도록 확장
 - 모임별 접근 권한과 OAuth 기반 개인 로그인 검토

@@ -1,9 +1,16 @@
 spring:
   datasource:
     url: ${DB_URL}
-    driver-class-name: org.postgresql.Driver
+    driver-class-name: com.mysql.cj.jdbc.Driver
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+    hikari:
+      # 잠금 대기 후 다시 조회할 때 다른 트랜잭션의 커밋이 보여야 한다.
+      transaction-isolation: TRANSACTION_READ_COMMITTED
+      data-source-properties:
+        "[sslMode]": REQUIRED
+  flyway:
+    locations: classpath:db/mysql
   h2:
     console:
       enabled: false
