@@ -11,7 +11,7 @@ TeamForge 백엔드는 Java 17과 Spring Boot를 사용하는 단일 Gradle 프�
 | `common.exception` | 공통 오류 응답 |
 | `auth` | 공유 계정 로그인과 세션·CSRF 보호 |
 
-기본 `dev` 프로필은 메모리 H2와 로컬 H2 Console을 사용합니다. `prod`는 환경 변수로 PostgreSQL에 연결합니다. Flyway가 스키마를 관리하고 JPA는 매핑을 검증합니다. 운영 PostgreSQL의 실제 연결과 잠금 검증은 환경 구성 후 수행합니다.
+기본 `dev` 프로필은 메모리 H2와 로컬 H2 Console을 사용합니다. `prod`는 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`로 외부 MySQL에 연결합니다. Flyway는 `dev`에서 `db/migration`, `prod`에서 `db/mysql`의 스키마를 적용하고 JPA는 매핑을 검증합니다. 운영 DB에는 JDBC URL에 지정할 스키마와 Flyway 적용 권한을 가진 계정을 먼저 만듭니다.
 
 ## API
 

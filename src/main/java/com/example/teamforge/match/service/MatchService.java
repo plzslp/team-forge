@@ -51,7 +51,7 @@ import java.util.stream.Collectors;
 public class MatchService {
     // H2는 제약 이름과 자동 생성 인덱스 이름을 함께 보고한다.
     private static final Pattern CONFIRMATION_KEY_CONSTRAINT = Pattern.compile(
-            "(?:PUBLIC\\.)?UK_MATCHES_CONFIRMATION_KEY(?: INDEX PUBLIC\\.UK_MATCHES_CONFIRMATION_KEY_INDEX_[0-9A-F]+)?",
+            "(?:PUBLIC\\.|MATCHES\\.)?UK_MATCHES_CONFIRMATION_KEY(?: INDEX PUBLIC\\.UK_MATCHES_CONFIRMATION_KEY_INDEX_[0-9A-F]+)?",
             Pattern.CASE_INSENSITIVE);
 
     private final ParticipantRepository participantRepository;
@@ -139,7 +139,7 @@ public class MatchService {
         List<GameProfile> lockedProfiles = gameProfileRepository.findAllForMatchConfirmation(ids, request.game());
         if (lockedProfiles.size() != 10) throw new BusinessException(ErrorCode.PREVIEW_OUTDATED);
 
-        // PostgreSQL에서는 outer join 대상까지 FOR UPDATE로 잠글 수 없으므로 행 잠금과 컬렉션 조회를 분리한다.
+        // 참가자와 프로필 행부터 잠근 뒤 선호 포지션 컬렉션을 읽는다.
         // 이미 잠근 프로필의 포지션만 일괄 조회하며 잠금은 이 트랜잭션이 끝날 때까지 유지된다.
         Map<UUID, GameProfile> profilesByParticipant = gameProfileRepository
                 .findAllWithPositionsByParticipantIdsAndGame(ids, request.game()).stream()
@@ -174,7 +174,8 @@ public class MatchService {
             return MatchCreateResponse.from(matchRepository.saveAndFlush(match));
         } catch (DataIntegrityViolationException exception) {
             if (confirmationKey != null && exception.getCause() instanceof ConstraintViolationException violation
-                    && "23505".equals(violation.getSQLState()) && violation.getConstraintName() != null
+                    && ("23505".equals(violation.getSQLState()) || violation.getErrorCode() == 1062)
+                    && violation.getConstraintName() != null
                     && CONFIRMATION_KEY_CONSTRAINT.matcher(violation.getConstraintName()).matches()) {
                 throw new BusinessException(ErrorCode.IDEMPOTENCY_KEY_REUSED, exception);
             }
